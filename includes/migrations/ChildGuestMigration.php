@@ -75,6 +75,14 @@ class ChildGuestMigration
 				$legacy_child_flag = ! empty( $raw_room[ $legacy_child_key ] );
 				$legacy_child_name = isset( $raw_room[ $legacy_child_name_key ] ) ? trim( (string) $raw_room[ $legacy_child_name_key ] ) : '';
 
+				// Some legacy rows only have the child's name in guest_N when guest_N_child=1.
+				if ( '' === $legacy_child_name && $legacy_child_flag && isset( $raw_room[ $guest_key ] ) ) {
+					$legacy_guest_slot_value = trim( (string) $raw_room[ $guest_key ] );
+					if ( '' !== $legacy_guest_slot_value && ! is_numeric( $legacy_guest_slot_value ) ) {
+						$legacy_child_name = $legacy_guest_slot_value;
+					}
+				}
+
 				if ( ! $legacy_child_flag && '' === $legacy_child_name ) {
 					continue;
 				}
