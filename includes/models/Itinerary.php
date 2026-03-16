@@ -644,17 +644,36 @@ class Itinerary
 		} );
 	}
 
+	public function getAdultGuests()
+	{
+		return array_filter( $this->getGuests(), function ( $Guest ) {
+			return ! $Guest->isChild();
+		} );
+	}
+
+	public function getChildGuests()
+	{
+		return array_filter( $this->getGuests(), function ( $Guest ) {
+			return $Guest->isChild();
+		} );
+	}
+
 	// Adults only
 	public function getGuestsCount()
 	{
-		return count( $this->getGuests() );
+		return count( $this->getAdultGuests() );
 	}
 
 	public function getChildrenCount()
 	{
+		$entity_children_count = count( $this->getChildGuests() );
+		if ( $entity_children_count > 0 ) {
+			return $entity_children_count;
+		}
+
+		// Backwards compatibility for legacy rows that still track child count on adults.
 		$total_children = 0;
-		foreach ( $this->getGuests() as $Guest ) {
-			// Casting false using intval won't add anything, because it is 0
+		foreach ( $this->getAdultGuests() as $Guest ) {
 			$total_children += intval( $Guest->getChildren() );
 		}
 		return $total_children;
@@ -664,6 +683,60 @@ class Itinerary
 	public function getTotalGuestsCount()
 	{
 		return ($this->getGuestsCount() + $this->getChildrenCount());
+	}
+
+
+	public function migrateLegacyChildrenToGuestEntities()
+	{
+		$created = 0;
+		foreach ( $this->getAdultGuests() as $Guest ) {
+			$legacy_children_count = intval( $Guest->getChildren() );
+			if ( $legacy_children_count <= 0 ) {
+				continue;
+			}
+
+			for ( $index = 1; $index <= $legacy_children_count; $index++ ) {
+				$child_name = trim( $Guest->getFirstName() . ' Child ' . $index . ' ' . $Guest->getLastName() );
+				$already_exists = false;
+				foreach ( $this->getChildGuests() as $ChildGuest ) {
+					if ( strtolower( trim( $ChildGuest->getFullName() ) ) === strtolower( $child_name ) ) {
+						$already_exists = true;
+						break;
+					}
+				}
+				if ( $already_exists ) {
+					continue;
+				}
+
+				$child_post_id = wp_insert_post( array(
+					'post_type' => 'guest',
+					'post_status' => 'publish',
+					'post_title' => $this->getTitle() . ' - ' . $child_name,
+				) );
+
+				if ( ! $child_post_id || is_wp_error( $child_post_id ) ) {
+					continue;
+				}
+
+				update_post_meta( $child_post_id, 'itinerary_id', $this->getPostID() );
+				update_post_meta( $child_post_id, 'guest_first_name', trim( $Guest->getFirstName() . ' Child ' . $index ) );
+				update_post_meta( $child_post_id, 'guest_last_name', $Guest->getLastName() );
+				update_post_meta( $child_post_id, 'guest_is_child', 1 );
+				update_post_meta( $child_post_id, 'guest_children', 0 );
+				update_post_meta( $child_post_id, 'guest_parent_id', $Guest->getPostID() );
+				$created++;
+			}
+
+			if ( $legacy_children_count > 0 ) {
+				update_post_meta( $Guest->getPostID(), 'guest_children', 0 );
+			}
+		}
+
+		if ( $created > 0 ) {
+			$this->guest_objects = null;
+		}
+
+		return $created;
 	}
 
 	public function transportationFormViewPath()
@@ -845,7 +918,7 @@ class Itinerary
 			'arrival_time' => $Guest->getArrivalTime(),
 			'departure_flight' => $Guest->getDepartureAirline(),
 			'departure_time' => $Guest->getDepartureTime(),
-			'children' => $Guest->getChildren(),
+			'is_child' => $Guest->isChild(),
 			'villa_name' => $Guest->getAssignedRoom() ? $Guest->getAssignedRoom()->getSubVilla()->getTitle() : '',
 		);
 	}

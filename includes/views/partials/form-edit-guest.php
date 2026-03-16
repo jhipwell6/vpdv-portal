@@ -16,8 +16,8 @@
 			<input type="text" value="" name="guest_email" />
 		</div>
 		<div class="col-xxs-12 col-md-6 push-bottom">
-			<label>Number of Children</label>
-			<input type="text" value="" name="guest_children" />
+			<label>Is Child Guest</label>
+			<input type="checkbox" value="1" name="guest_is_child" />
 		</div>
 	</div>
 	<div class="row">

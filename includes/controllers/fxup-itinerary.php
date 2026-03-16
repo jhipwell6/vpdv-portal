@@ -1363,7 +1363,10 @@ class FXUP_Itinerary_Process
 					// FXUP_USER_PORTAL()->debug_log('guest_email:', $value);
 					break;
 				case 'guest_children':
-					// FXUP_USER_PORTAL()->debug_log('guest_children:', $value);
+					// Backwards compatibility only; child guests are now first-class guest entities.
+					break;
+				case 'guest_is_child':
+					$Guest->setIsChild( (bool) $value );
 					break;
 				case 'onsite_stay':
 					// FXUP_USER_PORTAL()->debug_log('onsite_stay:', $value);
@@ -1616,6 +1619,9 @@ class FXUP_Itinerary_Process
 		$itinerary_post_id = sanitize_text_field( $room_list['itinerary'] );
 		$Itinerary = new \FXUP_User_Portal\Models\Itinerary( $itinerary_post_id );
 
+		// Backfill legacy child counts to guest entities before processing room assignments.
+		$Itinerary->migrateLegacyChildrenToGuestEntities();
+
 		// TODO: Update JavaScript to submit a bool here instead of 'submitted'.
 		if ( $_POST['submit_final'] == 'submitted' ) {
 			$Itinerary->setRoomArrangementsSubmitted( true );
@@ -1649,24 +1655,27 @@ class FXUP_Itinerary_Process
 
 			// Iterate over guests
 			for ( $i = 1; $i <= $Room->getTotalAllowedGuests(); ++ $i ) {
+				$guest_field_key = 'room-' . $room_form_key . '-guest-' . $i;
+				$legacy_child_name_key = 'room-' . $room_form_key . '-guest-' . $i . '-child-name';
+				$legacy_child_name = isset( $room_list[$legacy_child_name_key] ) ? trim( $room_list[$legacy_child_name_key] ) : '';
 
-				// If the guest is a valid Guest post type
-				if ( ( ! empty( $room_list['room-' . $room_form_key . '-guest-' . $i] )) && get_post( $room_list['room-' . $room_form_key . '-guest-' . $i] ) ) {
-					$Guest = new \FXUP_User_Portal\Models\Guest( $room_list['room-' . $room_form_key . '-guest-' . $i] );
+				// Preferred model: save selected guest entity directly in room slot.
+				if ( ( ! empty( $room_list[$guest_field_key] )) && get_post( $room_list[$guest_field_key] ) ) {
+					$Guest = new \FXUP_User_Portal\Models\Guest( $room_list[$guest_field_key] );
 					$Room->setGuest( $Guest, $i );
-				} else {
-					$Room->removeGuest( $i ); // Make sure no Guest is saved in that slot.
+					continue;
 				}
 
-				if ( isset( $room_list['room-' . $room_form_key . '-guest-' . $i . '-child'] ) ) {
-					$Room->setGuestChild( (bool) $room_list['room-' . $room_form_key . '-guest-' . $i . '-child'], $i ); // Comes as either a 1 or a 0. Method requires bool.
-				} else {
-					$Room->setGuestChild( false, $i );
+				// Backwards compatibility: old UI may still submit child-name-only slot data.
+				if ( ! empty( $legacy_child_name ) ) {
+					$ChildGuest = $this->get_or_create_child_guest_for_itinerary( $Itinerary, $legacy_child_name );
+					if ( $ChildGuest ) {
+						$Room->setGuest( $ChildGuest, $i );
+						continue;
+					}
 				}
 
-				if ( isset( $room_list['room-' . $room_form_key . '-guest-' . $i . '-child-name'] ) ) {
-					$Room->setGuestChildName( $room_list['room-' . $room_form_key . '-guest-' . $i . '-child-name'], $i );
-				}
+				$Room->removeGuest( $i ); // Make sure no Guest is saved in that slot.
 			}
 			$Room->setSelfSaveItinerary( true ); // Allow row to be updated
 			$inserted_row = $Room->saveToItinerary(); // Update row
@@ -1675,6 +1684,44 @@ class FXUP_Itinerary_Process
 
 		die;
 	}
+
+
+	private function get_or_create_child_guest_for_itinerary( $Itinerary, $child_full_name )
+	{
+		$child_full_name = trim( (string) $child_full_name );
+		if ( '' === $child_full_name ) {
+			return false;
+		}
+
+		$name_parts = preg_split( '/\s+/', $child_full_name );
+		$first_name = array_shift( $name_parts );
+		$last_name = implode( ' ', $name_parts );
+
+		foreach ( $Itinerary->getChildGuests() as $ChildGuest ) {
+			if ( strtolower( trim( $ChildGuest->getFullName() ) ) === strtolower( $child_full_name ) ) {
+				return $ChildGuest;
+			}
+		}
+
+		$new_guest_id = wp_insert_post( array(
+			'post_type' => 'guest',
+			'post_status' => 'publish',
+			'post_title' => $Itinerary->getTitle() . ' - ' . $child_full_name,
+		) );
+
+		if ( ! $new_guest_id || is_wp_error( $new_guest_id ) ) {
+			return false;
+		}
+
+		update_post_meta( $new_guest_id, 'itinerary_id', $Itinerary->getPostID() );
+		update_post_meta( $new_guest_id, 'guest_first_name', $first_name );
+		update_post_meta( $new_guest_id, 'guest_last_name', $last_name );
+		update_post_meta( $new_guest_id, 'guest_is_child', 1 );
+		update_post_meta( $new_guest_id, 'guest_children', 0 );
+
+		return new \FXUP_User_Portal\Models\Guest( $new_guest_id );
+	}
+
 
 	public function insert_room_details( $itin, $t_rooms, $room_list )
 	{

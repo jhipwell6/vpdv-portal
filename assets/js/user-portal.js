@@ -227,7 +227,6 @@ var FXUP = ( function ( FXUP, $ ) {
 
 		bind: function () {
 
-			$( '.js-guest-fields input:radio' ).on( 'ifClicked', this.toggleChildFields ); // Also call  FXUP.RoomBookingValidation.toggleChildFields
 			$( '.js-add-guest-check' ).on( 'ifChecked', this.showAddGuest );
 			$( '.js-add-guest-check' ).on( 'ifUnchecked', this.hideAddGuest ); // Also call FXUP.RoomBookingValidation.onRemoveAdditionalGuests
 			$( '.js-rooms-save' ).on( 'click', this.saveRooms );
@@ -246,40 +245,8 @@ var FXUP = ( function ( FXUP, $ ) {
 		},
 
 		toggleChildFields: function ( event ) {
-			$this = $( this );
-			$wrap = $this.closest( '.js-guest-wrap' );
-			$adult = $wrap.find( '.js-guest-adult' );
-			$child = $wrap.find( '.js-guest-child' );
-			$isChild = $this.val() == 1;
-			if ( $isChild ) {
-				FXUP.RoomArrangements.isAnimating = true;
-				$adult.slideUp( 400, () => {
-					$child
-							.slideDown( 400, function () {
-								FXUP.RoomArrangements.isAnimating = false;
-								$adult.find( 'select' ).prop( 'selectedIndex', 0 ); //.selectric('refresh');
-								FXUP.RoomBookingValidation.toggleChildFields( event );
-								// setTimeout(() => {FXUP.RoomBookingValidation.toggleChildFields(event)}, 0); // Only needs to execute if child is set to 1. Refreshes Selectric.
-							} )
-					// .slideDown(400)
-					// .delay(100)
-					// .slideDown(0, function() {
-					//     FXUP.RoomArrangements.isAnimating = false;
-					//     $adult.find('select').prop('selectedIndex', 0); //.selectric('refresh');
-					//     FXUP.RoomBookingValidation.toggleChildFields(event);
-					//     // setTimeout(() => {FXUP.RoomBookingValidation.toggleChildFields(event)}, 0); // Only needs to execute if child is set to 1. Refreshes Selectric.
-					// });
-				} );
-			} else {
-				FXUP.RoomArrangements.isAnimating = true;
-				$child.slideUp( 400, () => {
-					$adult.slideDown( 400, () => {
-						FXUP.RoomArrangements.isAnimating = false;
-						$child.find( 'input' ).val( '' );
-					} );
-				} );
-			}
-
+			// Guest slots now use a unified guest selector for adults and children.
+			// Keep method for backwards compatibility with legacy templates.
 		},
 
 		showAddGuest: function () {

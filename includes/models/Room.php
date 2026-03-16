@@ -305,19 +305,11 @@ class Room {
             'bed_configuration' => (string) $this->getBedConfiguration(),
             'pack_and_play' => (int) $this->isPackAndPlay(),
             'guest_1' => $this->getGuest(1) ? (string) $this->getGuest(1)->getPostID(): '',
-            'guest_1_child' => (int) $this->isGuestChild(1),
-            'guest_1_child_name' => (string) $this->getGuestChildName(1),
             'guest_2' => $this->getGuest(2) ? (string) $this->getGuest(2)->getPostID(): '',
-            'guest_2_child' => (int) $this->isGuestChild(2),
-            'guest_2_child_name' => (string) $this->getGuestChildName(2),
             'guest_3' => $this->getGuest(3) ? (string) $this->getGuest(3)->getPostID(): '',
-            'guest_3_child' => (int) $this->isGuestChild(3),
-            'guest_3_child_name' => (string) $this->getGuestChildName(3),
             'additional_guest' => (int) $this->isAdditionalGuest(),
             'special_requests' => (string) $this->getSpecialRequests(),
             'guest_4' => $this->getGuest(4) ? (string) $this->getGuest(4)->getPostID(): '',
-            'guest_4_child' => (int) $this->isGuestChild(4),
-            'guest_4_child_name' => (string) $this->getGuestChildName(4),
             'room_guests_villa_id' => (string) $this->getSubVilla()->getPostID(),
         );
 
@@ -413,15 +405,6 @@ class Room {
 				$list[] = $RoomGuest->getFullName();
 			}
 		}
-		
-		if ( ! empty( $this->areGuestsChildren() ) ) {
-			foreach ( $this->areGuestsChildren() as $index => $bool ) {
-				if ( (bool) $bool ) {
-					$list[] = $this->getGuestChildName( $index );
-				}
-			}
-		}
-		
 		return implode( ', ', array_filter( $list ) );
 	}
 
@@ -516,67 +499,40 @@ class Room {
     }
 
     public function areGuestsChildren() {
-        // If array has not been init or not all guests have been queried for
-        if (!is_array($this->are_guests_children) || count($this->are_guests_children) < $this->getTotalAllowedGuests()) {
-            //  This will be a 1 based index loop.
-            for ($i = 1; $i <= $this->getTotalAllowedGuests(); ++$i) {
-                $this->isGuestChild($i); // 1 based. Method updates internal state to add to internal array.
-            }
+        $are_guests_children = array();
+        for ($i = 1; $i <= $this->getTotalAllowedGuests(); ++$i) {
+            $are_guests_children[$i] = $this->isGuestChild($i);
         }
-        // return array_filter($this->are_guests_children, function($is_guest_child) { return (bool) $is_guest_child; }); // Returns array stripped of any gaps.
-        return $this->are_guests_children; // Returns array
+        return $are_guests_children;
     }
 
     public function isGuestChild($index) {
-        // Cached
-        if (!isset($this->are_guests_children[$index])) {
-            if (!is_array($this->are_guests_children)) {
-                $this->are_guests_children = array();
-            }
-            $key = 'guest_' . $index . '_child'; // 1 based
-            $raw_row_itinerary = $this->getRawRowItinerary();
-            $this->are_guests_children[$index] = (bool) isset($raw_row_itinerary[$key]) ? $raw_row_itinerary[$key] : false;
+        $Guest = $this->getGuest($index);
+        if ($Guest instanceof self::$GuestClass) {
+            return (bool) $Guest->isChild();
         }
-        return $this->are_guests_children[$index];
+
+        // Backwards compatibility for legacy room rows that stored child placeholders.
+        $key = 'guest_' . $index . '_child';
+        $raw_row_itinerary = $this->getRawRowItinerary();
+        return isset($raw_row_itinerary[$key]) ? (bool) $raw_row_itinerary[$key] : false;
     }
 
     public function setGuestChild($bool, $index) {
-        $bool = (bool) $bool;
-        $this->are_guests_children[$index] = $bool;
-        if ($bool && $this->getGuest($index)) {
-            $this->removeGuest($index); // Make sure to remove any adult guest if the guest has been set to Child (so that Adult is free to be assigned elsewhere).
-        }
-        $this->saveToItinerary(); // Save to db;
+        // Legacy no-op to preserve backwards compatibility with old save calls.
         return $index;
     }
 
     public function getGuestChildNames() {
-        // If array has not been init or not all guests have been queried for
-        if (!is_array($this->guest_child_names) || count($this->guest_child_names) < $this->getTotalAllowedGuests()) {
-            //  This will be a 1 based index loop.
-            for ($i = 1; $i <= $this->getTotalAllowedGuests(); ++$i) {
-                $this->getGuestChildName($i); // 1 based. Method updates internal state to add to internal array.
-            }
-        }
-        return $this->guest_child_names; // Returns array
+        return array();
     }
 
     public function getGuestChildName($index) {
-        // Cached
-        if (!isset($this->guest_child_names[$index])) {
-            if (!is_array($this->guest_child_names)) {
-                $this->guest_child_names = array();
-            }
-            $key = 'guest_' . $index . '_child_name'; // 1 based
-            $raw_row_itinerary = $this->getRawRowItinerary();
-            $this->guest_child_names[$index] = isset($raw_row_itinerary[$key]) ? $raw_row_itinerary[$key] : false;
-        }
-        return $this->guest_child_names[$index];
+        return false;
     }
 
     public function setGuestChildName($name, $index) {
-        $this->guest_child_names[$index] = $name;
-        $this->saveToItinerary(); // Save to db;
+        // Legacy no-op to preserve backwards compatibility with old save calls.
         return $index;
     }
 
