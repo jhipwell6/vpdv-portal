@@ -86,7 +86,8 @@ class FXUP_Importer
 
 	private function process_guest( $guest_data, $itin_id )
 	{
-		$guest = $this->get_guest_by_email( $guest_data['guest_email'] );
+		$guest_email = isset( $guest_data['guest_email'] ) ? trim( (string) $guest_data['guest_email'] ) : '';
+		$guest = '' !== $guest_email ? $this->get_guest_by_email( $guest_email ) : false;
 		if ( $guest ) {
 			$guest_id = $this->update_guest( $guest_data, $guest->ID, $itin_id );
 		} else {
@@ -129,11 +130,19 @@ class FXUP_Importer
 	private function save_guest_meta( $guest_data, $guest_id )
 	{
 		$allowed_keys = self::get_allowed_keys();
+		$is_child = ! empty( $guest_data['guest_is_child'] );
 		
 		foreach ( $guest_data as $key => $value ) {
 			if ( in_array( $key, $allowed_keys ) ) {
+				if ( 'guest_email' === $key ) {
+					$value = $is_child ? '' : trim( (string) $value );
+				}
 				update_post_meta( $guest_id, $key, $value );
 			}
+		}
+
+		if ( $is_child ) {
+			update_post_meta( $guest_id, 'guest_email', '' );
 		}
 	}
 

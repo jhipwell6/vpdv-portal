@@ -1360,7 +1360,7 @@ class FXUP_Itinerary_Process
 					// FXUP_USER_PORTAL()->debug_log('guest_last_name:', $value);
 					break;
 				case 'guest_email':
-					// FXUP_USER_PORTAL()->debug_log('guest_email:', $value);
+					$Guest->setEmail( $value );
 					break;
 				case 'guest_children':
 					// @deprecated legacy child storage. Backwards compatibility only; child guests are now first-class guest entities.
@@ -1448,6 +1448,16 @@ class FXUP_Itinerary_Process
 			$guest_data = Form_Handler::get_form_data( 'guest_data' );
 			if ( ! empty( $guest_data ) ) {
 				foreach ( $guest_data as $prop => $value ) {
+					if ( 'guest_is_child' === $prop ) {
+						$Guest->setIsChild( (bool) $value );
+						continue;
+					}
+
+					if ( 'guest_email' === $prop ) {
+						$Guest->setEmail( $value );
+						continue;
+					}
+
 					if ( is_array( $value ) && ! empty( $value ) ) {
 						delete_post_meta( $Guest->getPostID(), $prop );
 						foreach ( $value as $val ) {
@@ -2891,10 +2901,14 @@ class FXUP_Itinerary_Process
 			foreach ( $Itineraries as $Itinerary ) {
 				$Guests = $Itinerary->getGuests();
 				$Guests = array_filter( $Guests, function ( $Guest ) use ( &$Today ) {
+					if ( ! $Guest->canReceiveEmail() ) {
+						return false;
+					}
+
 					$should_notify = false;
 					$last_sent = $Guest->getGuestTravelDeadlineNotificationSent();
 					// If arrangements are not finalized...
-					if ( ! $Guest->isTravelFinalized() ) {
+					if ( $Guest->canReceiveEmail() && ! $Guest->isTravelFinalized() ) {
 						// Notify the guest if they have never been notified before OR if X number of days since their last notification
 						if ( $last_sent instanceof \DateTime ) {
 							// As long as reminders are active, if today is after/equal last sent + the reminder interval, send because the reminder is due/overdue.

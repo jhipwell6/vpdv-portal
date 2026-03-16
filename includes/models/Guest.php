@@ -165,6 +165,28 @@ class Guest
 		return $this->email;
 	}
 
+	public function canReceiveEmail()
+	{
+		if ( $this->isChild() ) {
+			return false;
+		}
+
+		return '' !== trim( (string) $this->getEmail() );
+	}
+
+	public function setEmail( $email )
+	{
+		$this->email = trim( (string) $email );
+
+		if ( $this->isChild() ) {
+			$this->email = '';
+		}
+
+		update_post_meta( $this->getPostID(), 'guest_email', $this->email );
+
+		return $this->email;
+	}
+
 	public function getChildren()
 	{
 		if ( null === $this->children ) {
@@ -189,6 +211,7 @@ class Guest
 		if ( $this->is_child ) {
 			update_post_meta( $this->getPostID(), 'guest_children', 0 );
 			$this->children = 0;
+			$this->setEmail( '' );
 		}
 		return $this->is_child;
 	}
