@@ -99,7 +99,7 @@ class FXUP_Notifications
 		
 		if ( ! empty( $Guests ) ) {
 			foreach ( $Guests as $Guest ) {
-				if ( ! $Guest->isTravelFinalized() ) {
+				if ( $Guest->canReceiveEmail() && ! $Guest->isTravelFinalized() ) {
 					$email_data = array(
 						'message_body' => $this->email_guest_travel_deadline_reminder_message,
 						'travel_url' => $Guest->getTravelLink(),
