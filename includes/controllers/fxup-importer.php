@@ -97,6 +97,7 @@ class FXUP_Importer
 			$itinerary_data = $this->get_itinerary_data( $itin_id );
 			$data = array_merge( $guest_data, $itinerary_data );
 			$this->save_guest_meta( $data, $guest_id );
+			$this->maybe_import_legacy_children_as_guests( $guest_data, $itin_id, $guest_id );
 		}
 	}
 
@@ -171,6 +172,36 @@ class FXUP_Importer
 		return [];
 	}
 
+
+	private function maybe_import_legacy_children_as_guests( $guest_data, $itin_id, $parent_guest_id )
+	{
+		$children_count = isset( $guest_data['guest_children'] ) ? (int) $guest_data['guest_children'] : 0;
+		if ( $children_count <= 0 ) {
+			return;
+		}
+
+		for ( $index = 1; $index <= $children_count; $index++ ) {
+			$child_first_name = isset( $guest_data['guest_first_name'] ) ? $guest_data['guest_first_name'] . ' Child ' . $index : 'Child ' . $index;
+			$child_last_name = isset( $guest_data['guest_last_name'] ) ? $guest_data['guest_last_name'] : '';
+			$title = $this->get_itinerary_title( $itin_id ) . ' - ' . trim( $child_first_name . ' ' . $child_last_name );
+			$child_guest_id = wp_insert_post( [
+				'post_title' => $title,
+				'post_type' => 'guest',
+				'post_status' => 'publish',
+			] );
+			if ( ! $child_guest_id || is_wp_error( $child_guest_id ) ) {
+				continue;
+			}
+			update_post_meta( $child_guest_id, 'guest_first_name', $child_first_name );
+			update_post_meta( $child_guest_id, 'guest_last_name', $child_last_name );
+			update_post_meta( $child_guest_id, 'itinerary_id', $itin_id );
+			update_post_meta( $child_guest_id, 'guest_is_child', 1 );
+			update_post_meta( $child_guest_id, 'guest_children', 0 );
+			update_post_meta( $child_guest_id, 'guest_parent_id', $parent_guest_id );
+		}
+	}
+
+
 	static function get_allowed_keys()
 	{
 		return [
@@ -179,6 +210,7 @@ class FXUP_Importer
 			'guest_last_name',
 			'guest_email',
 			'guest_children',
+			'guest_is_child',
 			'guest_notes',
 			'guest_dietary_restrictions',
 			'guest_dietary_restriction_other',

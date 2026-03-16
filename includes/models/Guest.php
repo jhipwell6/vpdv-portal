@@ -14,6 +14,7 @@ class Guest
 	private $email;
 	private $passport_number;
 	private $children;
+	private $is_child;
 	private $notes;
 	private $travel_notes;
 	private $flight_number;
@@ -170,6 +171,25 @@ class Guest
 			$this->children = get_post_meta( $this->getPostID(), 'guest_children', true );
 		}
 		return $this->children;
+	}
+
+	public function isChild()
+	{
+		if ( null === $this->is_child ) {
+			$this->is_child = (bool) get_post_meta( $this->getPostID(), 'guest_is_child', true );
+		}
+		return $this->is_child;
+	}
+
+	public function setIsChild( $is_child )
+	{
+		$this->is_child = (bool) $is_child;
+		update_post_meta( $this->getPostID(), 'guest_is_child', (int) $this->is_child );
+		if ( $this->is_child ) {
+			update_post_meta( $this->getPostID(), 'guest_children', 0 );
+			$this->children = 0;
+		}
+		return $this->is_child;
 	}
 
 	public function getNotes()
@@ -775,6 +795,7 @@ class Guest
 			'guest_last_name' => $this->getLastName(),
 			'guest_email' => $this->getEmail(),
 			'guest_children' => $this->getChildren(),
+			'guest_is_child' => $this->isChild(),
 			'onsite_stay' => $this->isOnsite(),
 			'stay_location' => $this->getStayLocation(),
 			'stay_location_other' => $this->getStayLocationOther(),
@@ -793,6 +814,7 @@ class Guest
 			'guest_last_name' => $this->getLastName(),
 			'guest_email' => $this->getEmail(),
 			'guest_children' => $this->getChildren(),
+			'guest_is_child' => $this->isChild(),
 			'guest_notes' => $this->getNotes(),
 			'guest_dietary_restrictions' => $this->getDietaryRestrictionsList(),
 			'guest_dietary_restriction_other' => $this->getOtherDietaryRestrictionsDetails(),

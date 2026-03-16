@@ -143,7 +143,7 @@
 						<th>Last Name</th>
 						<th>Airline/Flight</th>
 						<th>Time</th>
-						<th>Children</th>
+						<th>Guest Type</th>
 						<th>Villa</th>
 						<?php if ( $is_concierge ) : ?><th class="text-center">Remove</th><?php endif; ?>
 					</tr>
@@ -166,7 +166,7 @@
 							<td class="guest-list__last-name" data-field-name="guest_last_name"><span class="field-value"><?php echo $Guest->getLastName(); ?></span></td>
 							<td class="guest-list__flight" data-field-name="guest_flight"><span class="field-value"><?php echo $Guest->$airline_getter() . ' ' . $Guest->$flight_number_getter(); ?></span></td>
 							<td class="guest-list__time" data-field-name="guest_time"><span class="field-value"><?php echo $Guest->$time_getter(); ?></span></td>
-							<td class="guest-list__children" data-field-name="guest_children"><span class="field-value"><?php echo $Guest->getChildren() ?? 0; ?></span></td>
+							<td class="guest-list__children" data-field-name="guest_is_child"><span class="field-value"><?php echo $Guest->isChild() ? 'Child' : 'Adult'; ?></span></td>
 							<td class="guest-list__villa" data-field-name="villa_name">
 								<span class="field-value"><?php echo $Guest->getAssignedRoom() ? $Guest->getAssignedRoom()->getSubVilla()->getTitle() : ''; ?></span>
 							</td>

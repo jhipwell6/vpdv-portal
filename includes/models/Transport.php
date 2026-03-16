@@ -328,11 +328,6 @@ class Transport
 		}
 		
 		foreach ( $this->getGuestObjects() as $Guest ) {
-			if ( $Guest->getChildren() ) {
-				for ( $c = 0; $c < $Guest->getChildren(); $c++ ) {
-					$count++;
-				}
-			}
 			$count++;
 		}
 		

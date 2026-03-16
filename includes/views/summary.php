@@ -80,7 +80,7 @@
 													<div class="accordion-cont accordion-active print-wrapper">
 														<div class="print-col">
 															<h4>Guest Details:</h4>
-															<p><b>Number of Children:</b> <?php echo $Guest->getChildren(); ?></p>
+															<p><b>Guest Type:</b> <?php echo $Guest->isChild() ? "Child" : "Adult"; ?></p>
 															<p><b>Guest Notes:</b> <?php echo !empty($Guest->getNotes()) ? $Guest->getNotes() : 'N/A'; ?></p>
 															<p><b>Guest Dietary Restrictions:</b> <?php echo (!empty($Guest->getDietaryRestrictions())) ? implode(', ', $Guest->getDietaryRestrictions()) : 'N/A'; ?></p>
 															<?php if ($Guest->isOtherDietaryRestrictions()) { ?>
