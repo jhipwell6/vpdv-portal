@@ -168,6 +168,7 @@ class Guest
 	public function getChildren()
 	{
 		if ( null === $this->children ) {
+			// @deprecated legacy child storage
 			$this->children = get_post_meta( $this->getPostID(), 'guest_children', true );
 		}
 		return $this->children;

@@ -106,6 +106,7 @@ function generate_concierge_guest_list( $id ) {
         <p><b>Guest Name: </b><?php echo get_post_meta( get_the_ID(), 'guest_first_name', true ); ?> <?php echo get_post_meta( get_the_ID(), 'guest_last_name', true ); ?></p>
         <p><b>Guest Email: </b><?php echo get_post_meta( get_the_ID(), 'guest_email', true ); ?></p>
         <p><b>Passport Number: </b><?php echo get_post_meta( get_the_ID(), 'passport_number', true ) ?></p>
+        <?php // @deprecated legacy child storage ?>
         <p><b>Number of Children: </b><?php echo get_post_meta( get_the_ID(), 'guest_children', true ); ?></p>
         <p><b>Guest Notes: </b><br><?php echo get_post_meta( get_the_ID(), 'guest_notes', true ) ? get_post_meta( get_the_ID(), 'guest_notes', true ) : 'N/A'; ?></p>
         --------------------------------<br>
@@ -126,6 +127,7 @@ function generate_concierge_room_arrangements( $itinerary ) {
             $room_name_value = get_post_meta( $itinerary, 'room_guests_' . $room_guest . '_room_name' );
             $bed_config_value = get_post_meta( $itinerary, 'room_guests_' . $room_guest . '_bed_configuration' );
             $guest_one_value = get_post_meta( $itinerary, 'room_guests_' . $room_guest . '_guest_1' );
+            // @deprecated legacy child storage
             $guest_one_child_value = get_post_meta( $itinerary, 'room_guests_' . $room_guest . '_guest_1_child' );
             $guest_one_child_name = get_post_meta( $itinerary, 'room_guests_' . $room_guest . '_guest_1_child_name' );
             $guest_two_value = get_post_meta( $itinerary, 'room_guests_' . $room_guest . '_guest_2' );

@@ -172,6 +172,8 @@ final class FXUP_USER_PORTAL
         include_once $this->plugin_path() . '/includes/models/Email.php';
 		// FXUP_User_Portal\Models\EmailDigest
         include_once $this->plugin_path() . '/includes/models/EmailDigest.php';
+		// FXUP_User_Portal\Migrations\ChildGuestMigration
+		include_once $this->plugin_path() . '/includes/migrations/ChildGuestMigration.php';
 		
 		// Helpers
 		include_once $this->plugin_path() . '/includes/helpers/form-handler.php';
@@ -198,6 +200,7 @@ final class FXUP_USER_PORTAL
 		include_once $this->plugin_path() . '/includes/core/gravity-forms.php';
 		include_once $this->plugin_path() . '/includes/core/action-queue.php';
 		include_once $this->plugin_path() . '/includes/core/email-service.php';
+		include_once $this->plugin_path() . '/includes/core/wp-cli.php';
 		
 		// Libraries
 		include_once $this->plugin_path() . '/vendor/autoload.php';
