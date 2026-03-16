@@ -1,0 +1,13 @@
+{
+    "name": "vendor/villa-punto-de-vista-portal",
+    "description": "Description of project Villa Punto de Vista Portal.",
+    "authors": [
+        {
+            "name": "Jason Hipwell",
+            "email": "jason@snowberrymedia.com"
+        }
+    ],
+    "require": {
+        "league/csv": "9.8.0"
+    }
+}

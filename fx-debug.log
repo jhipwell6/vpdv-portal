@@ -1,0 +1,22 @@
+2023-09-26 12:34:50 $arrivals Array
+(
+)
+
+2023-09-26 12:34:50 $departures Array
+(
+)
+
+2023-09-26 12:34:50 raw_transports Array
+(
+    [arrival] => Array
+        (
+            [0] => 
+        )
+
+    [departure] => Array
+        (
+            [0] => 
+        )
+
+)
+

@@ -1,0 +1,2004 @@
+var FXUP = (function(FXUP, $) {
+
+    // This is to prevent the user from putting the same guest into more than 1 room.
+    FXUP.RoomBookingValidation = {
+        roomList: null,
+        default: 'Select a Guest',
+        selects: null,
+        mapSelects: null,
+        guests: null,
+        sortedGuestsIDs: null,
+        assignedGuests: null, // Currently, this is keyed and stored by name, not Guest post id. Also includes the "Select a guest" default.
+        unassignedGuests: null,
+        init() {
+            console.log("init FXUP.RoomBookingValidation");
+            this.roomList = document.querySelector('#room-list');
+            if (this.roomList) {
+                //  To Do: remove this debug logic
+                this.bind();
+            }
+        },
+        bind() {
+
+            console.log('Binding FXUP.RoomBookingValidation');
+            this.selects = this.roomList.querySelectorAll('select.room-guest-assignment');
+            if (!(this.mapSelects instanceof Map)) {
+                this.mapSelects = new Map();
+            }
+            if (!(this.guests instanceof Map)) {
+                this.guests = new Map();
+            }
+            if (!(this.assignedGuests instanceof Set)) {
+                this.assignedGuests = new Set();
+            }
+            if (!(this.unassignedGuests instanceof Set)) {
+                this.unassignedGuests = new Set();
+            }
+            // Get all Guest Names
+            // Get all Assigned Guest Names
+            this.selects.forEach(select => {
+                let selected = select.value;
+                this.mapSelects.set(select, selected);
+                this.assignedGuests.add(selected);
+                let options = Array.from(select.options);
+                options.forEach(option => {
+                    let guestID = option.value;
+                    let guestName = option.innerHTML;
+                    this.guests.set(guestID, guestName);
+                });
+                // Sort guest IDs by their names 
+                if (!(this.sortedGuestsIDs instanceof Array)) {
+                    this.sortedGuestsIDs = [...this.guests]
+                        .sort((guestArrayOne, guestArrayTwo) => {
+                            // Compare on name
+                            return guestArrayOne[1] < guestArrayTwo[1] ? -1 : (guestArrayOne[1] > guestArrayTwo[1] ? 1 : 0);
+                        })
+                    // Only retain the ID
+                        .map(guestArray => guestArray[0])
+                }
+                // Have to use jQuery to bind this event - because of selectric.
+                $(select).on('change', (e) => {
+                    this.onSelectChange(select);
+                });
+                // this.assignedGuests = [...new Set(this.assignedGuests.push(selected))];
+                // let options = Array.from(select.options).map(option => option.value);
+                // this.guests = [...new Set([...this.guests, ...options])];
+            });
+            // Figure out which ones are Unassigned by comparison to Assigned
+            this.unassignedGuests = new Set(Array.from(this.guests.keys()).filter(guestID => !this.assignedGuests.has(guestID)));
+
+            this.refreshSelects();
+
+            // Handle these in FXUP.RoomArrangements so that animation is executed first.
+            // $('.js-guest-fields input:radio').on('ifClicked', (event) => this.toggleChildFields(event));
+            // $('.js-add-guest-check').on('ifUnchecked', (event) => this.onRemoveAdditionalGuests(event)); 
+
+        },
+        toggleChildFields(event) {
+            let radioInput = event.target;
+            if (radioInput.value == 1) {
+                this.onGuestIsAChild(radioInput)
+            }
+        },
+        onGuestIsAChild(radioInput) {
+            let wrapper = radioInput.closest('.js-guest-wrap');
+            let select = wrapper.querySelector('select.room-guest-assignment');
+            select.value = this.default;
+            this.onSelectChange(select);
+        },
+        onRemoveAdditionalGuests(event) {
+            let checkbox = event.target;
+            let wrapper = checkbox.closest('.room-config-group');
+            let selects = wrapper.querySelectorAll('.js-additional-guests-container select.room-guest-assignment');
+            // Set to default
+            selects.forEach(select => {
+                select.value = this.default;
+            });
+            this.onSelectChange(...selects);
+        },
+        changeSelectValue(select, value) {
+            select.value = value;
+            this.onSelectChange(select);
+            // $(select).val(value);
+            // $(select).trigger('change'); // Trigger the refresh ('change') jQuery event to free up the Guest for other selects.
+        },
+        onSelectChange(...selects) {
+            selects.forEach(select => {
+                let newValue = select.value;
+                let oldValue = this.mapSelects.get(select);
+                // Set the new value
+                this.mapSelects.set(select, newValue);
+                this.assignedGuests.add(newValue);
+                this.unassignedGuests.delete(newValue);
+
+                this.assignedGuests.delete(oldValue);
+                this.unassignedGuests.add(oldValue);
+
+            });
+            this.refreshSelects(...selects);
+        },
+        refreshSelects(...changedSelects) {
+
+            if (changedSelects.length) {
+                // If a select was changed, prioritize refreshing this one so the experience is more interactive
+                changedSelects.forEach(changedSelect => {
+                    let changedSelectValue = changedSelect.value;
+                    this.refreshSelect(changedSelect, changedSelectValue);
+                })
+            }
+
+            // Iterate through selects
+            for (const [select, value] of this.mapSelects.entries()) {
+                if (changedSelects.includes(select)) {continue;} // Don't bother refreshing the one that was changed.
+                setTimeout(() => this.refreshSelect.bind(this)(select,value), 0); // Makes the experience feel faster because pushes to EventLoop queue.
+                // this.refreshSelect(select, value);
+            }
+        },
+        refreshSelect(select, value) {
+            if (FXUP.RoomArrangements.isAnimating) {
+                setTimeout(() => this.refreshSelect.bind(this)(select,value), 0);
+                return;
+            }
+            // Add the currently chosen value to the unsorted unassignedGuestNames, remove the default option (will appear on top), and sort them by name.
+            let validGuestIDs = [value, ...this.unassignedGuests].filter(guestID => guestID !== this.default).sort((guestIDOne, guestIDTwo) => {
+                sortPositionOne = this.sortedGuestsIDs.indexOf(guestIDOne);
+                sortPositionTwo = this.sortedGuestsIDs.indexOf(guestIDTwo);
+                return sortPositionOne < sortPositionTwo ? -1 : (sortPositionOne > sortPositionTwo ? 1 : 0);
+            }); // Strips the default
+            let newOptions = validGuestIDs.map(guestID => {
+                let optionElem = document.createElement('option');
+                optionElem.value = guestID;
+                optionElem.innerHTML = this.guests.get(guestID); // Get the associated Guest Name
+                return optionElem;
+            });
+            // Add the default option to the top of the dropdown. Note: The default may have been the currently selected value. If so, it will be selected.
+            let defaultOption = document.createElement('option');
+            defaultOption.value = this.default;
+            defaultOption.innerHTML = this.default;
+            newOptions.unshift(defaultOption);
+            // Not IE supported
+            // select.replaceChildren(...newOptions);
+
+            // IE supported
+            while (select.firstElementChild) {
+                select.firstElementChild.remove();
+            }
+            newOptions.forEach(option => {
+                select.insertAdjacentElement('beforeend', option);
+            })
+            select.value = value; // Might be the default.
+            $(select).selectric('refresh');
+        }
+    }
+
+    FXUP.SharedSaveStatusBar = {
+
+        statusUpdate: function(event) {
+
+            // First get rid of any SUBMITTED message from the last save
+            if ( $('.js-itin-save-status-submitted').length > 0 ) {
+                $('.js-itin-save-status-submitted').slideUp();
+            }
+
+            // First get rid of any SAVED message from the last save
+            if ( $('.js-itin-save-status-saved').length > 0 ) {
+                $('.js-itin-save-status-saved').slideUp();
+            }
+
+            // Next, add a reminder to save.
+            if( $('.js-itin-save-status').length > 0 ) {
+                window.onbeforeunload = function () {
+                    return true;
+                };
+                $('.js-itin-save-status').slideDown();
+            }
+
+        },
+
+        closeStatus: function(event) {
+            $(this).closest('.itin-save-status').slideUp();
+        },
+
+        displayPopup: function(event) {
+            event.preventDefault();
+            $('.itin-add-popup').fadeIn();
+        },
+
+        closePopup: function(event) {
+            event.preventDefault();
+            $(this).closest('.popup-confirm-wrapper').fadeOut();
+        },
+
+        exitPopup: function(event) {
+            if( $('.js-itin-save-status').length > 0 ) {
+                window.onbeforeunload = null;
+                $('.js-itin-save-status').slideUp();
+            }
+        },
+    }
+
+    FXUP.RoomArrangements = {
+        isAnimating: null,
+        init: function() {
+            var $roomDetails = $('#room-list');
+            if ($roomDetails.length > 0) {
+                this.bind();
+            }
+        },
+
+        bind: function() {
+
+            $('.js-guest-fields input:radio').on('ifClicked', this.toggleChildFields); // Also call  FXUP.RoomBookingValidation.toggleChildFields
+            $('.js-add-guest-check').on('ifChecked', this.showAddGuest);   
+            $('.js-add-guest-check').on('ifUnchecked', this.hideAddGuest); // Also call FXUP.RoomBookingValidation.onRemoveAdditionalGuests
+            $('.js-rooms-save').on('click', this.saveRooms);
+            $('.js-itin-save').on('click', this.saveRooms);
+
+            $('.js-rooms-submit').on('click', this.saveRooms);
+
+            $('body').on('change', '#room-list select', FXUP.SharedSaveStatusBar.statusUpdate); // Once value is selected
+            $('body').on('input', '#room-list input, #room-list textarea', FXUP.SharedSaveStatusBar.statusUpdate); // As soon as input is changed, even if still in focus
+            $('body').on('ifChanged', FXUP.SharedSaveStatusBar.statusUpdate); // For iCheck boxes
+
+            $('.js-close-status').on('click touch', FXUP.SharedSaveStatusBar.closeStatus);
+            $('.js-add-itinerary-item').on('click', FXUP.SharedSaveStatusBar.displayPopup);
+            $('body').on('click', '.js-itin-popup-close', FXUP.SharedSaveStatusBar.closePopup);
+            $('.js-popup-exit').on('click', FXUP.SharedSaveStatusBar.exitPopup);
+        },
+
+        toggleChildFields: function(event) {
+            $this = $(this);
+            $wrap = $this.closest('.js-guest-wrap');
+            $adult = $wrap.find('.js-guest-adult');
+            $child = $wrap.find('.js-guest-child');
+            $isChild = $this.val() == 1;
+            if( $isChild ) {
+                FXUP.RoomArrangements.isAnimating = true;
+                $adult.slideUp(400, () => {
+                    $child
+                        .slideDown(400, function() {
+                            FXUP.RoomArrangements.isAnimating = false;
+                            $adult.find('select').prop('selectedIndex', 0); //.selectric('refresh');
+                            FXUP.RoomBookingValidation.toggleChildFields(event);
+                            // setTimeout(() => {FXUP.RoomBookingValidation.toggleChildFields(event)}, 0); // Only needs to execute if child is set to 1. Refreshes Selectric.
+                        })
+                    // .slideDown(400)
+                    // .delay(100)
+                    // .slideDown(0, function() {
+                    //     FXUP.RoomArrangements.isAnimating = false;
+                    //     $adult.find('select').prop('selectedIndex', 0); //.selectric('refresh');
+                    //     FXUP.RoomBookingValidation.toggleChildFields(event);
+                    //     // setTimeout(() => {FXUP.RoomBookingValidation.toggleChildFields(event)}, 0); // Only needs to execute if child is set to 1. Refreshes Selectric.
+                    // });
+                });
+            }
+            else {
+                FXUP.RoomArrangements.isAnimating = true;
+                $child.slideUp(400, () => {
+                    $adult.slideDown(400, () => {
+                        FXUP.RoomArrangements.isAnimating = false;
+                        $child.find('input').val('');
+                    });
+                });
+            }
+
+        },
+
+        showAddGuest: function() {
+            FXUP.RoomArrangements.isAnimating = true;
+            $(this).closest('.js-additional-guest').next().slideDown(400, function() {
+                FXUP.RoomArrangements.isAnimating = false;
+            });        
+        },
+
+        hideAddGuest: function(event) {
+            FXUP.RoomArrangements.isAnimating = true;
+            $this = $(this);
+            $additionalGuest = $this.closest('.js-additional-guest');
+            $additionalGuestSelectsContainer = $additionalGuest.next();
+            $additionalGuestSelectsContainer
+                .slideUp(400, function() {
+                    FXUP.RoomArrangements.isAnimating = false;
+                    $additionalGuestSelectsContainer.find('.js-guest-child input').val('');    
+                    $additionalGuestSelectsContainer.find('.js-guest-adult select').prop('selectedIndex', 0);  // .selectric('refresh');
+                    FXUP.RoomBookingValidation.onRemoveAdditionalGuests(event);
+                })
+            // .slideUp(400)
+            // .delay(100)
+            // .slideUp(0, function() {
+            // FXUP.RoomArrangements.isAnimating = false;
+            // $additionalGuestSelectsContainer.find('.js-guest-child input').val('');    
+            // $additionalGuestSelectsContainer.find('.js-guest-adult select').prop('selectedIndex', 0);  // .selectric('refresh');
+            // FXUP.RoomBookingValidation.onRemoveAdditionalGuests(event);
+            // });  
+        },
+
+        saveRooms: function(event) {
+            event.preventDefault();
+            var roomDetails = $('#room-list').serialize(),
+                submit = false;
+
+            if( $(this).hasClass('js-rooms-submit') ) {
+                submit = 'submitted';
+            }
+
+            $.ajax({
+                type: 'post',
+                url: FX.ajaxurl,
+                data: {
+                    action: 'save_room_list',
+                    room_list: roomDetails,
+                    submit_final: submit
+                },
+                beforeSend: function() {
+                    $('.ajax-loading').fadeIn();
+                },
+                success: function( results ) {
+                    $('.ajax-loading').fadeOut();
+
+                    setTimeout(function() {
+                        $('.js-itin-save-status').slideUp();
+                        $('.js-itin-save-status-submitted, .js-itin-save-status-saved').slideUp();
+                        if( submit ) {
+                            $('.js-itin-save-status-submitted').slideDown().delay(2500).slideUp();
+                        }
+                        else {
+                            $('.js-itin-save-status-saved').slideDown().delay(2500).slideUp();
+                        }
+
+                    }, 500 ); 
+                }
+            })
+        }
+    }
+
+    FXUP.GuestTravel = {
+
+        init: function() {
+            if (document.querySelector('#travel-list')) {
+                console.log('binding GuestTravel');
+                this.bind();
+            }
+        },
+
+        bind: function() {
+            $('body').on('click', '.js-travel-save', this.saveTravel);
+            $('.js-itin-save').on('click', this.saveTravel);
+
+            $('body').on('change', '#travel-list select', FXUP.SharedSaveStatusBar.statusUpdate); // Once value is selected
+            $('body').on('input', '#travel-list input, #travel-list textarea', FXUP.SharedSaveStatusBar.statusUpdate); // As soon as input is changed, even if still in focus
+            $('body').on('litepickerSelect', FXUP.SharedSaveStatusBar.statusUpdate); // Custom Event for LitePicker updates
+            $('body').on('ifChanged', FXUP.SharedSaveStatusBar.statusUpdate); // For iCheck boxes
+
+            $('.js-close-status').on('click touch', FXUP.SharedSaveStatusBar.closeStatus);
+
+            $.fn.extend({
+                toggleText: function(a, b){
+                    return this.text(this.text() == b ? a : b);
+                }
+            });
+
+            // Hide the loading spinner ()
+            this.hideLoaderSpinner();
+        },
+
+        saveTravel: function(event) {
+            event.preventDefault();
+            var travelDetails = $('#travel-list').serialize();
+
+            $.ajax({
+                type: 'post',
+                url: FX.ajaxurl,
+                data: {
+                    action: 'save_travel_list',
+                    travel_list: travelDetails
+                },
+                beforeSend: function() {
+                    $('.ajax-loading').fadeIn();
+                },
+                success: function( results ) {
+                    $('.ajax-loading').fadeOut();
+
+                    setTimeout(function() {
+                        $('.js-itin-save-status').slideUp();
+                        $('.js-itin-save-status-submitted').slideDown().delay(2500).slideUp();
+                    }, 500 ); 
+                }
+            });
+        },
+
+        hideLoaderSpinner: function() {
+            let loaderSpinner = document.querySelector('.loader-spinner');
+            if (loaderSpinner) {
+                loaderSpinner.classList.add('hide-loader');
+            }
+        }
+
+    }
+
+    FXUP.GuestTravelInfo = {
+
+        init: function() {
+            if (document.querySelector('#guest-travel-info')) {
+                console.log('binding GuestTravelInfo');
+                this.bind();
+            }
+        },
+
+        bind: function() {
+
+            $('body').on('submit', '#guest-travel-info', this.saveGuestTravel);
+            $('body').on('change', '#guest-travel-info input, #guest-travel-info select, #guest-travel-info textarea', FXUP.SharedSaveStatusBar.statusUpdate);
+            $('body').on('ifChanged', FXUP.SharedSaveStatusBar.statusUpdate); // For iCheck boxes
+            $('.js-close-status').on('click touch', FXUP.SharedSaveStatusBar.closeStatus);
+
+            $.fn.extend({
+                toggleText: function(a, b){
+                    return this.text(this.text() == b ? a : b);
+                }
+            });
+
+        },
+
+        saveGuestTravel: function(event) {
+            event.preventDefault();
+            var guestTravelDetails = $('#guest-travel-info').serialize();
+
+            $.ajax({
+                type: 'post',
+                url: FX.ajaxurl,
+                data: {
+                    action: 'save_guest_travel_list',
+                    guest_travel_list: guestTravelDetails
+                },
+                success: function( results ) {
+                    setTimeout(function() {
+                        $('.js-itin-save-status-submitted').slideDown();
+                    }, 500 ); 
+                }
+            });
+        },
+
+    },
+
+
+        FXUP.GuestList = {
+
+            init: function() {
+                if (document.querySelector('#gform_4') || document.querySelector('#gform_5')) {
+                    console.log('binding GuestList');
+                    this.bind();
+                    window.updateTableCell = this.updateTableCell;
+                    // window.serializeGuestRowData = this.serializeGuestRowData;
+                    window.getForm = this.getForm;
+                    window.submitFormToAdmin = this.submitFormToAdmin;
+                    window.applyFormToTable = this.applyFormToTable;
+                    window.showFormField = this.showFormField;
+                    window.updateFormInput = this.updateFormInput;
+                }
+            },
+
+            bind: function() {
+                // $('.js-guest-list-save').on('click touch', this.save);
+                // $('body').on('click', '.js-delete-guest', this.delete);
+                // $('body').on('click', '.js-delete-confirm-guest', this.confirmDelete);
+                // $('body').on('click', '.js-add-guest-item', this.addOne);
+                // $('body').on('click', '.js-add-guest', this.addGuest);
+                // $('body').on('click', '.js-delete-single-guest', this.deleteGuest);
+                $('body').on('click', '.js-delete-guest-cancel, .js-onsite-change-cancel', this.deleteCancel);
+                // $('body').on('click', '.js-delete-confirm-single-guest', this.confirmDeleteGuest);
+                // $('body').on('click', '.js-add-new-guest', this.userAddGuest);
+                // $('body').on('click', '.js-user-delete-single-guest', this.userDeleteGuest);
+                // $('body').on('click', '.js-user-add-guest-group', this.userInsertGuestGroup);
+                // $('body').on('submit', '.js-user-guest-list', this.userInsertGuestGroup);
+                // $('body').on('change', '#guest-list input, #guest-list select, #guest-list textarea', this.statusUpdate);
+                $('body').on('click', '.js-remove-guest', this.removePopup);
+                $('body').on('click', '.js-onsite-change', this.changePopup);
+                $('body').on('click', '.js-update-onsite', this.updateOnsite);
+                $('body').on('click', '.js-delete-confirm-single-guest', this.deleteGuestConfirm);
+                $('.js-close-status').on('click touch', FXUP.SharedSaveStatusBar.closeStatus);
+                $('.guest-dietary-restrictions-checkboxes input[value="Other"]').on('ifChanged', this.maybeShowOtherDietaryRestrictions);
+
+                $popupSubmitConfirm = $('.js-popup-submit-confirm');
+                if ($popupSubmitConfirm.length) {
+                    this.setUpPopup($popupSubmitConfirm, this.submitGuestList);
+                    $('body').on('click', '.js-glist-save', () => {
+                        this.showPopup.bind(this, $popupSubmitConfirm)();
+                    });
+                }
+
+
+
+                $('body').on('click touchstart', '.js-guest-field-edit-pen', this.editPen);
+                $('body').on('click touchstart', '.js-edit-guest-list-row-submit', this.confirmPopup);
+                // Prevent form from submitting when a popup input is "entered" - should just close the popup
+                $('body').on('keydown', '.popup-confirm-wrapper input', (event) => {
+                    if (event.keyCode == 13) {
+                        event.preventDefault();
+                        this.confirmPopup.bind(event.target)()
+                        return false;
+                    }
+                });
+
+                $.fn.extend({
+                    toggleText: function(a, b){
+                        return this.text(this.text() == b ? a : b);
+                    }
+                });
+
+                $('.js-add-new-guest-button').on( 'click', function(event) {
+                    $('.js-add-new-guest-form').slideToggle();
+                    $(this).toggleText('Add Additional Guest', 'Hide Guest Form');
+                });
+
+                $(document).on('gform_confirmation_loaded', function(event, formId){
+                    if(formId == 5) {
+                        // location.reload();
+                        // Remove any hash
+                        let newLocation = window.location.href.replace(window.location.hash, '');
+                        if (newLocation.charAt(newLocation.length - 1) === '#') {
+                            newLocation = newLocation.substr(0, newLocation.length - 1);
+                        }
+                        // Prevent the default "Changes may not be saved" dialog
+                        window.onbeforeunload = null;
+                        // Reload the page
+                        window.location.href = newLocation;
+                    } 
+                });
+
+            },
+
+            setUpPopup($popup, callback) {
+                $popup.on('click touchstart', '.js-submit-confirm', function (event) {
+                    callback(event); // 'this' will be the clicked element
+                    $popup.fadeOut();
+                });
+                $popup.on('click touchstart', '.js-itin-popup-close', () => $popup.fadeOut());
+            },
+
+            showPopup($popup) {
+                $popup.fadeIn();
+            },
+
+            confirmPopup() {
+                let $this = $(this);
+                let $wrapper = $this.closest('.popup-confirm-wrapper');
+                let $form = $this.closest('form.edit-row-form');
+                // let guestID = $form.data('form-guest-id');
+                let formElem = $form[0]; // Turn back into HTMLFormElement
+
+                $wrapper.fadeOut();
+
+                let redraw = 'full-hold'; // Redraws rows in their current position
+                FXUP.GuestList.applyFormToTable(formElem, redraw);
+                FXUP.GuestList.submitFormToAdmin(formElem);
+            },
+
+
+            editPen() {
+                let $this = $(this);
+                let $fieldElement = $this.closest('[data-button-field]');
+                let field = $fieldElement.data('button-field');
+                let $row = $this.closest('[data-button-guest-id]');
+                let guestID = $row.data('button-guest-id');
+                FXUP.GuestList.showFormField(guestID, field);
+            },
+
+            showFormField(guestID, field) {
+                let form = FXUP.GuestList.getForm(guestID);
+                let input = form.querySelector(`[name="${field}"]`);
+                let $input= $(input);
+                let $wrapper = $input.closest('.popup-confirm-wrapper');
+                $wrapper.fadeIn();
+            },
+
+            getForm(guestID) {
+
+                if (! guestID) {
+                    return;
+                }
+
+                const existingFormKey = `#guest_list_edit_row_${guestID}`;
+                let existingForm = document.querySelector(existingFormKey);
+
+                // Use form that has already been requested and appended to document if it exists
+                if (! existingForm) {
+                    // Grab a new form and append to document if not already appended
+                    $.ajax({
+                        async: false,
+                        type: 'post',
+                        url: FX.ajaxurl,
+                        data: {
+                            action: 'edit_guest_list_row',
+                            guest_id: guestID,
+                        },
+                        success: function( response ) {
+
+                            let results = JSON.parse(response);
+                            let markup = results.form_markup;
+
+                            // Check whether container for guest forms exists - create if it does not
+                            let container = document.querySelector('#guest_list_edit_row_form_container');
+                            if (!container) {
+                                container = document.createElement('div');
+                                container.id = 'guest_list_edit_row_form_container';
+                                document.body.insertAdjacentElement('beforeend', container);
+                            }                
+                            container.insertAdjacentHTML('beforeend', markup);
+                            addedForm = container.querySelector(existingFormKey);
+                            existingForm = addedForm;
+                        }
+                    });
+
+                }
+
+                return existingForm;
+            },
+
+            applyFormToTable(formElem, finalDrawPaging = true) {
+                let formData = new FormData(formElem);
+                let guestID = formData.get('guest_id');
+                let lastUpdatedCellField = null;
+                for (let [field, value] of formData) {
+                    lastUpdatedCellField = FXUP.GuestList.updateTableCell(guestID, field, value, 'page'); // Pass argument to prevent from drawing until all fields are updated
+                }
+                lastUpdatedCellField.draw(finalDrawPaging); // Finally, call draw with full-hold to reset the search filters. By default, will refresh
+            },
+
+            submitFormToAdmin(formElem) {
+                // this is the form
+                let formData = new FormData(formElem);
+                let guestID = formData.get('guest_id');
+                let onsite = formData.get('onsite_stay');
+
+                let dataParams = new URLSearchParams(formData);
+                let dataString = dataParams.toString();
+
+                // let testObject = {"undefined":"value undefined","guest_first_name":"value guest_first_name","guest_last_name":"value guest_last_name","guest_email":"value guest_email","guest_children":"value guest_children","onsite_stay":"value onsite_stay","stay_location":"value stay_location","villa_id":"value villa_id","room_name":"value room_name","guest_notes":"value guest_notes","dietary_restrictions":"value dietary_restrictions","guest_allergies":"value guest_allergies"};
+                // let testQueryParams = new URLSearchParams(testObject);
+                // let testQueryString = testQueryParams.toString();
+
+                $.ajax({
+                    type: 'post',
+                    url: FX.ajaxurl,
+                    data: {
+                        action: 'submit_guest_list_row_edit',
+                        guest_id: guestID,
+                        guest_row_form_data: dataString
+                    },
+                    success: function( results ) {
+                        console.log(results);             
+                    }
+                });
+            },
+
+            serializeGuestRowData(guestID) {
+
+                const row = {};
+
+                const $table = $('#guest_list');
+                const $DataTable = $table.DataTable();
+                const $tableDataGuestID = $table.find('td [data-guestid="'+guestID+'"]');
+                const $tableRow = $tableDataGuestID.closest('tr[role="row"');
+                const $tableRowFields = $tableRow.find('td');
+
+                $tableRowFields.each((index, element) => {
+
+                });
+
+
+            },
+
+            updateFormInput(guestID, field, value) {
+                let form = FXUP.GuestList.getForm(guestID);
+                form[field].value = value;
+            },
+
+
+            updateTableCell(guestID, field, value, paging = true) {
+
+                // field example: first-name
+                // classField example: '.guest-list__first-name'
+
+                const $table = $('#guest_list');
+                const $DataTable = $table.DataTable();
+
+                // const $tableDataGuestID = $table.find('td [data-guestid="'+guestID+'"]');
+
+                const $tableRow = $table.find('[data-row-guest-id="'+guestID+'"]');
+
+                const $tableDataField = $tableRow.find(`[data-field-name="${field}"]`); // Lookup table data field using custom attributes
+
+                const $tableDataFieldValue = $tableDataField.find('.field-value');
+                $tableDataFieldValue.html(value);
+
+                // $tableDataField.html(value); // Update the inner element inside the td to flip the flag
+
+                const cellField = $DataTable.cell($tableDataField);
+
+                cellField.data($tableDataField.html()); // Must access/pass the FULL updated td inner HTML to cell's data to update DataTable state
+
+
+                cellField.draw(paging); // For paginated tables, wait to call draw() until all fields on page have been updated
+
+                return cellField;
+            },
+
+            removePopup: function(event) {
+                event.preventDefault();        
+                var guestID = $(this).attr('data-id');
+                $('.js-delete-confirm-single-guest').attr('data-guestdelete', guestID );
+                $('.js-popup-delete-single-guest').fadeIn();
+            },
+
+            changePopup: function(event) {
+                event.preventDefault();
+
+                var guestID = $(this).attr('data-guestid');
+                $('.js-update-onsite').attr('data-guestupdate', guestID );
+                $('.js-popup-change-onsite-status').fadeIn();
+            },
+
+            updateOnsite: function(event) {
+                event.preventDefault();
+                var guestID = $(this).attr('data-guestupdate'),
+                    onsite = $(this).attr('data-onsite') === '1',
+                    table = $('#guest_list').DataTable();
+
+                onsiteText = onsite ? 'Yes' : 'No';
+                draw = 'full-hold'; // Adhere to filters by defualt
+                // If not onsite, then we do not even refresh the filters because there are future updates to make to the row before it is potentially hidden from the results
+                if (! onsite) {
+                    draw = 'page';
+                }
+
+                const $tableData = $('td [data-guestid="'+guestID+'"]').closest('td');
+                const cell = table.cell($tableData);
+
+                $tableData.find('.js-onsite-status').html(onsiteText); // Update the inner element inside the td to flip the flag
+
+                cell.data($tableData.html()); // Must access/pass the FULL updated td inner HTML to cell's data to update DataTable state
+                cell.draw(draw); // Page only - the page is not moved
+
+                // IMPORTANT: Update the hidden form with the new consite value. If "offsite", a Location popup will display and then secretly submit the entire form (including this onsite_stay field);
+                FXUP.GuestList.updateFormInput(guestID, 'onsite_stay', onsiteText);
+
+                $.ajax({
+                    type: 'post',
+                    url: FX.ajaxurl,
+                    data: {
+                        action: 'update_guest_onsite_status',
+                        guest_id: guestID,
+                        onsite: onsiteText
+                    },
+                    success: function( results ) {
+                        $('.js-popup-change-onsite-status').fadeOut();
+                        if (! onsite) {
+                            // If user is offsite, show the Location form popup and remove their Villa and Room fields                       
+                            // Set Villa and Room form fields to blanks
+                            FXUP.GuestList.updateFormInput(guestID, 'villa_id', ''); // Villa ID
+                            FXUP.GuestList.updateFormInput(guestID, 'room_name', '');
+                            // Set Villa and Room table fields to blanks
+                            FXUP.GuestList.updateTableCell(guestID, 'villa_name', '', draw); // Villa NAME -- Do not call draw yet - wait untl stay_location is updated.
+                            FXUP.GuestList.updateTableCell(guestID, 'room_name', '', draw); // Now we can move the page
+                            // Display Location popup
+                            FXUP.GuestList.showFormField(guestID, 'stay_location');
+                        }
+                    }
+                });
+
+            },
+
+            deleteGuestConfirm: function(event) {
+                var guestID = $(this).attr('data-guestdelete'),
+                    itineraryID = $('#input_5_17').val(),
+                    table = $('#guest_list').DataTable();
+
+                table
+                    .row( $('td [data-id="'+guestID+'"]').parents('tr') )
+                    .remove()
+                    .draw();
+
+                $.ajax({
+                    type: 'post',
+                    url: FX.ajaxurl,
+                    data: {
+                        action: 'user_remove_guest_item',
+                        guest_id: guestID,
+                        itin_id: itineraryID
+                    },
+                    success: function( results ) {
+                        $('.js-popup-delete-single-guest').fadeOut();                    
+                    }
+                });
+            },
+
+            submitGuestList: function(event) {
+                event.preventDefault();
+                var $itinElem = $('[data-itin]').first();
+                var itin = $itinElem.attr('data-itin');
+
+                $.ajax({
+                    type: 'post',
+                    url: FX.ajaxurl,
+                    data: {
+                        action: 'submit_guest_list',
+                        itin_id: itin
+                    },
+                    success: function( results ) {
+                        const $submitSuccessBox = $('.js-itin-save-status-saved.itin-save-status.saved');
+                        $submitSuccessBox.slideDown().delay(2500).slideUp();
+                    }
+                });
+            },
+
+            save: function(event) {
+                event.preventDefault();
+
+                guestList = $('#guest-list').serialize();
+                $('.guest-error').remove();
+                $.ajax({
+                    type: 'post',
+                    url: FX.ajaxurl,
+                    data: {
+                        action: 'save_guest_list',
+                        guest_list: guestList
+                    },
+                    success: function( results ) {
+                        guestInsert = JSON.parse(results);
+                        if( 'errors' in guestInsert) {
+                            $.each( guestInsert.errors, function( i, v ) {
+                                $('input[name="'+i+'"').after('<span class="guest-error">'+v+'</span>');
+                            });
+                        }
+                        else {
+                            if( $('.js-itin-save-status').length > 0 ) {
+                                window.onbeforeunload = null;
+                                $('.js-itin-save-status').slideUp();
+                            }
+                            $('.js-itin-save-status-saved').slideDown();
+                        }
+                    }
+                });
+            },
+
+            addOne: function(event) {
+                event.preventDefault();
+                guestList = $('#guest-list').serialize();
+
+                $.ajax({
+                    type: 'post',
+                    url: FX.ajaxurl,
+                    data: {
+                        action: 'add_guest_list_item',
+                        guest_list: guestList
+                    },
+                    success: function( results ) {
+                        var listInsert = JSON.parse( results );
+
+                        $(listInsert.target).after(listInsert.html);
+
+                        if( $('.js-itin-save-status').length > 0 ) {
+                            window.onbeforeunload = null;
+                            $('.js-itin-save-status').slideDown();
+                        }
+                    }
+                });
+            },
+
+            userInsertGuestGroup: function(event) {
+                event.preventDefault();
+
+                guestList = $('#guest-list').serialize(),
+                    itineraryID = $('#guest-list input[name="itinerary_id"]').val();
+                $('.guest-error').remove();
+
+                $.ajax({
+                    type: 'post',
+                    url: FX.ajaxurl,
+                    data: {
+                        action: 'user_insert_guest_list_item',
+                        guest_list: guestList,
+                        itinerary_id: itineraryID
+                    },
+                    success: function( results ) {
+                        guestInsert = JSON.parse(results);
+
+                        if( 'errors' in guestInsert) {
+                            $.each( guestInsert.errors, function( i, v ) {
+                                if( i == 'imahuman' ) {
+                                    $('.js-user-add-guest-group').after('<span class="guest-error">'+v+'</span>');
+                                }
+                                else {
+                                    $('input[name="'+i+'"').after('<span class="guest-error">'+v+'</span>');
+                                }
+                            });
+                        }
+                        else {
+                            window.location.replace(guestInsert.redirect);
+                        }
+                    }
+                });
+            },
+
+            addGuest: function(event) {
+                event.preventDefault();
+
+                guestList = $('#guest-list').serialize();
+                guestGroup = $(this).attr('data-group');
+
+                $.ajax({
+                    type: 'post',
+                    url: FX.ajaxurl,
+                    data: {
+                        action: 'add_guest_item',
+                        guest_list: guestList,
+                        guest_group: guestGroup
+                    },
+                    success: function( results ) {
+                        var guestInsert = JSON.parse(results);
+                        $(guestInsert.target+' .js-add-guest').before(guestInsert.html);
+                        if( $('.js-itin-save-status').length > 0 ) {
+                            window.onbeforeunload = null;
+                            $('.js-itin-save-status').slideDown();
+                        }
+                    }
+                });
+            },
+
+            userAddGuest: function(event) {
+                event.preventDefault();
+
+                guestList = $('#guest-list').serialize();
+
+                $.ajax({
+                    type: 'post',
+                    url: FX.ajaxurl,
+                    data: {
+                        action: 'user_add_guest_item',
+                        guest_list: guestList
+                    },
+                    success: function( results ) {
+                        var guestInsert = JSON.parse(results);
+                        $('.js-guest-insert').before(guestInsert.html);
+                        $('.js-guest-insert').prev().find('select').selectric({
+                            arrowButtonMarkup: '<b class="button"></b>'
+                        });
+                    }
+                });
+
+            },
+
+            userDeleteGuest: function(event) {
+                event.preventDefault();
+
+                targetDelete = $(this).closest('.guest-list-item');
+
+                setTimeout(function() {
+                    $(targetDelete).closest('.guest-list-item').remove();
+                }, 500 );
+            },
+
+            deleteGuest: function(event) {
+                event.preventDefault();
+                var groupDelete = $(this).closest('.js-accordion-wrapper').data('group'),
+                    guestDelete = $(this).attr('data-guest');
+
+                $('.js-delete-confirm-single-guest').attr('data-groupdelete', groupDelete).attr('data-guestdelete', guestDelete);
+                $('.js-popup-delete-single-guest').fadeIn();
+
+            },
+
+            deleteCancel: function(event) {
+                event.preventDefault();
+                $('.js-popup-delete-guest, .js-popup-delete-single-guest, .js-popup-change-onsite-status').fadeOut();
+            },
+
+            delete: function(event) {
+                event.preventDefault();
+
+                var groupDelete = $(this).closest('.js-accordion-wrapper').data('group');
+                $('.js-delete-confirm-guest').attr('data-groupdelete', groupDelete);
+                $('.js-popup-delete-guest').fadeIn();
+            },
+
+            confirmDelete: function(event) {
+                event.preventDefault();
+
+                targetGroup = $(this).attr('data-groupdelete');
+                setTimeout(function() {
+                    $('.js-group-'+targetGroup).remove();
+                }, 500 );
+                $('.js-popup-delete-guest').fadeOut();
+                if( $('.js-itin-save-status').length > 0 ) {
+                    window.onbeforeunload = null;
+                    $('.js-itin-save-status').slideDown();
+                }
+            },
+
+            confirmDeleteGuest: function(event) {
+                event.preventDefault();
+
+                targetGroup = $(this).attr('data-groupdelete'),
+                    targetGuest = $(this).attr('data-guestdelete');
+
+                setTimeout(function() {
+                    $('.js-group-'+targetGroup+' .js-guest-'+targetGuest).remove();
+                }, 500 );
+                $('.js-popup-delete-single-guest').fadeOut();
+                if( $('.js-itin-save-status').length > 0 ) {
+                    window.onbeforeunload = null;
+                    $('.js-itin-save-status').slideDown();
+                }
+            },
+
+            statusUpdate: function(event) {
+                if( $('.js-itin-save-status').length > 0 ) {
+                    window.onbeforeunload = function () {
+                        return true;
+                    };
+                    $('.js-itin-save-status').slideDown();
+                }
+            },
+
+            maybeShowOtherDietaryRestrictions: function() {
+                // const isOtherChecked = $('.guest-dietary-restrictions-checkboxes').find('input[value="Other"]').closest('.icheckbox').hasClass('checked');
+                const $otherTextArea = $('.guest-dietary-restrictions-other-textarea');
+                $otherTextArea.toggleClass('gfield_visibility_hidden');
+            },
+
+        },
+
+        FXUP.FormItinerary = {
+
+            init: function() {
+                this.bind();
+                const tripDatesInput = document.querySelector('#trip-dates');
+                if (null !== tripDatesInput) {
+                    this.createLitepicker(tripDatesInput, this.tripDatesOnSelect);
+                }
+            }, 
+
+            bind: function() {
+                $('#form-itinerary').on('submit', this.submit);
+            },
+
+            submit: function(event) {
+                event.preventDefault();
+                const form = $(event.target);
+                const formData = form.serialize();
+                $.ajax({
+                    type: 'post',
+                    url: FX.ajaxurl,
+                    data: {
+                        action: 'user_create_new_itinerary',
+                        form_data: formData,
+                    },
+                    success: function(response) {
+                        const parsedResponse = JSON.parse(response);
+                        // Clear errors
+                        $('[data-input-errors]').text('');
+                        if (parsedResponse.hasOwnProperty('errors')) {
+                            const errors = parsedResponse.errors;
+                            for (const key in errors) {
+                                if (errors.hasOwnProperty(key)) {
+                                    $(`[data-input-errors="${key}"]`).text(`${errors[key]}`);
+                                    if (key === 'trip_start_date' || key === 'trip_end_date') {
+                                        $(`[data-input-errors="trip_dates"]`).text(`${errors[key]}`);
+                                    }
+                                }
+                            }
+                        } 
+
+                        if (parsedResponse.hasOwnProperty('message') && 'String' === parsedResponse.message.constructor.name) {
+                        }
+
+                        if (parsedResponse.hasOwnProperty('redirect') && parsedResponse.message.constructor.name) {
+                            window.location.replace(parsedResponse.redirect);
+                        }
+                    }
+                });
+            },
+
+            getFormattedDate: function(date) {
+                var year = date.getFullYear();
+
+                var month = (1 + date.getMonth()).toString();
+                month = month.length > 1 ? month : '0' + month;
+
+                var day = date.getDate().toString();
+                day = day.length > 1 ? day : '0' + day;
+
+                return month + '/' + day + '/' + year;
+            },
+
+            createLitepicker: function(textInputElement, callback) {
+                const picker = new Litepicker(
+                    { 
+                        element: textInputElement,
+                        format: 'MM-DD-YYYY',
+                        singleMode: false,
+                        useResetBtn: true,
+                        dropdowns: {
+                            minYear: 2019,
+                            maxYear: 2030,
+                            months: true,
+                            years: true
+                        },
+                        onSelect: callback,
+                    }
+                );
+            },
+
+            tripDatesOnSelect: function(date1, date2) {
+                const formattedDate1 = FXUP.FormItinerary.getFormattedDate(date1);
+                const formattedDate2 = FXUP.FormItinerary.getFormattedDate(date2);
+                $('#trip-start-date').val(formattedDate1);
+                $('#trip-end-date').val(formattedDate2);
+            },
+        },
+
+        FXUP.Itinerary = {
+
+            init: function() {
+                // Make sure this is only using the save logic for the Itinerary edit view, not the other edit views
+                itinForm = $('#itinerary-form');
+                if (itinForm.length > 0) {
+                    this.bind();
+                }
+            },
+
+            bind: function() {
+                $('.js-itin-save').on('click', this.save);
+                $('.js-submit-confirm').on('click', this.saveSubmit);
+                $('.js-itin-submit').on('click', this.submit);
+
+                $('body').on('change', '#itinerary-form select:not(.js-jump-dropdown)', FXUP.SharedSaveStatusBar.statusUpdate); // Once value is selected
+                $('body').on('input', '#itinerary-form input, #itinerary-form textarea', FXUP.SharedSaveStatusBar.statusUpdate); // As soon as input is changed, even if still in focus
+                $('body').on('ifChanged', FXUP.SharedSaveStatusBar.statusUpdate); // For iCheck boxes
+
+                $('.js-close-status').on('click touch', this.closeStatus);
+                $('.js-add-itinerary-item').on('click', this.displayPopup);
+                $('body').on('click', '.js-itin-popup-close', this.closePopup);
+                $('.js-popup-exit').on('click', this.exitPopup);
+                $('body').on('change', '.js-total-adults, .js-total-children', this.updatePrice);
+            },
+            isConcierge: function() {
+               return !! $('input[name=concierge-user]').val();
+            },
+            save: function(event) {
+                event.preventDefault();
+				tinyMCE.triggerSave();
+
+                itinForm = $('#itinerary-form').serialize();  
+                itinUser = $('input[name=itin-user]').val();
+                concierge = $('input[name=concierge-user]').val();
+
+                $.ajax({
+                    type: 'post',
+                    url: FX.ajaxurl,
+                    data: {
+                        action: 'save_itinerary',
+                        itin_form: itinForm,
+                        concierge: concierge,
+                        itin_user: itinUser
+                    },
+                    beforeSend: function() {
+                        $('.ajax-loading').fadeIn();
+                    },
+                    success: function() {
+                        // Remove any hash
+                        let newLocation = window.location.href.replace(window.location.hash, '');
+                        if (newLocation.charAt(newLocation.length - 1) === '#') {
+                            // Remove trailing '#' if still attached.
+                            newLocation = newLocation.substr(0, newLocation.length - 1);
+                        }
+                        // $(window).off('beforeunload');
+                        // Prevent the "Changes may not be saved" dialog
+                        window.onbeforeunload = null;
+                        // Reload the page
+                        //window.location = newLocation;
+                        $('.ajax-loading').fadeOut();
+
+                        setTimeout(function() {
+                            $('.js-itin-save-status').slideUp();
+                            $('.js-itin-save-status-saved').slideUp();
+                            $('.js-itin-save-status-saved').slideDown().delay(2500).slideUp();
+
+                        }, 500 ); 
+
+                        /*
+            $('.js-popup-exit').hide();
+            $('.ajax-loading').fadeOut();
+            if( $('.js-itin-save-status').length > 0 ) {
+            window.onbeforeunload = null;
+            $('.js-itin-save-status').slideUp();                        
+// setTimeout(function() {
+// location.reload();
+// }, 2500 );                                                    
+            }
+            $('.js-itin-save-status-saved').slideDown();
+            $('.js-popup-confirm').fadeIn();
+
+// If not concierge, then update the tooltip to show that Itinerary is back to Pending Client Submission
+// Backend will handle actually changing the status (based on customer version of the form not having an input for the itinerary status - will default back to Pending Client Submission when no input received)
+            if ('1' !== concierge) {
+                    // This only fires for customer
+            $('.itinerary-status').html('<h5>Itinerary Status: Pending Client Submission <i class="itin-tooltip far fa-question-circle" title="Your itinerary is Pending Client Submission"></i></h5>');
+            $('.itin-tooltip-text .tooltip').text("You're making changes! You may fire when ready.");
+            }
+// If concierge, leave the tooltip and status alone. Concierge can set the status manually in this form, and we should allow their override. Backend will accept this override too.
+
+// Update fields
+            FXUP.Itinerary.updateActivityApprovalStatus();
+            FXUP.Itinerary.updateActivityBookedStatus();
+            FXUP.Itinerary.updatePrice();
+            */
+}
+});
+},
+
+    submit: function(event) {
+        event.preventDefault();
+
+        $('.js-popup-confirm').hide();
+        $('.js-popup-exit').hide();
+        $('.js-popup-submit-confirm').fadeIn();
+    },
+
+    saveSubmit: function(event) {
+        event.preventDefault();
+
+        itinForm = $('#itinerary-form').serialize();
+        itinUser = $('input[name=itin-user]').val();
+
+
+        $.ajax({
+            type: 'post',
+            url: FX.ajaxurl,
+            data: {
+                action: 'save_submit_itinerary',
+                itin_form: itinForm,
+                itin_user: itinUser,
+            },
+            beforeSend: function() {
+                $('.ajax-loading').fadeIn();
+            },
+            success: function() {
+                $('.ajax-loading').fadeOut();
+                $('.js-popup-submit-confirm').hide();
+                $('.js-popup-confirm').hide();
+                $('.js-popup-exit').hide();
+                if( $('.js-itin-save-status').length > 0 ) {
+                    window.onbeforeunload = null;
+                    $('.js-itin-save-status').slideUp();
+                }
+                if( $('.js-itin-save-status-saved').length > 0 ) {
+                    window.onbeforeunload = null;
+                    $('.js-itin-save-status-saved').slideUp();                    
+                }
+                $('.js-itin-save-status-submitted').slideDown().delay(2500).slideUp();
+                $('.itinerary-status').html('<h5>Itinerary Status: Pending Concierge Approval<i class="itin-tooltip far fa-question-circle" title="Your itinerary is Pending Concierge Approval"></i></h5>');
+                $('.itin-tooltip-text .tooltip').text('We are taking a look and will confirm everything shortly!');
+                $('.js-itin-submit i').removeClass('fa-file-import').addClass('fa-check');
+                // $('.js-popup-submit-confirmed').fadeIn()
+                FXUP.Itinerary.updateActivityApprovalStatus();
+                FXUP.Itinerary.updateActivityBookedStatus();
+                FXUP.Itinerary.updatePrice();
+            }
+        });
+    },
+
+    closeStatus: function(event) {
+        $(this).closest('.itin-save-status').slideUp();
+    },
+
+    displayPopup: function(event) {
+        event.preventDefault();
+        $('.itin-add-popup').fadeIn();
+        // Grab the TripDay identifier attribute from the element that was clicked
+        var day = $(this).attr('data-day'); // The clicked element on the popup has a data attribute for the day to add this activity to.
+        FXUP.Activities.setTripDay(day);
+    },
+
+    closePopup: function(event) {
+        event.preventDefault();
+        $(this).closest('.popup-confirm-wrapper').fadeOut();
+    },
+
+    exitPopup: function(event) {
+        if( $('.js-itin-save-status').length > 0 ) {
+            window.onbeforeunload = null;
+            $('.js-itin-save-status').slideUp();
+        }
+    },
+
+    updatePrice: function(event) {
+        /*
+        var totalAdults = $(this).closest('.js-accordion-cont').find('.js-total-adults').val(),
+        costAdult = parseFloat( $(this).closest('.js-accordion-cont').find('.js-price-adult').html() ),
+        totalChild = $(this).closest('.js-accordion-cont').find('.js-total-children').val(),
+        costChild = parseFloat( $(this).closest('.js-accordion-cont').find('.js-price-child').html() ),
+        totalCostAdult = costAdult * totalAdults,
+        totalCostChild = costChild * totalChild,
+        priceInsert = (totalCostAdult + totalCostChild).toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
+
+        $(this).closest('.js-accordion-cont').find('.js-total-price').html('$' + priceInsert );
+
+
+        var activityPrices = $('.js-total-price'),
+        itineraryTotalPrice = 0;
+
+        $.each(activityPrices, function( i, v ) {
+        costRaw = $(this).html();
+        costFormatted = costRaw.replace( '$', '' );
+        itineraryTotalPrice += parseFloat(costFormatted);
+        });
+
+        itineraryPriceInsert = itineraryTotalPrice.toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,')
+// $('.js-total-itinerary-price').html('$' + itineraryPriceInsert);
+*/
+
+// Only do this if user is concierge
+if ('1' === $('input[name="concierge-user"]').val()) {
+
+    // Get all activities that are booked
+    const $checkedBookedCheckboxes = $('.activity-booked-checkbox:checked');
+    const $bookedActivityAccordions = $checkedBookedCheckboxes.closest('.activity-accordion'); // Accordions for booked activities
+    // Get the final costs for those activities
+    const $exactFinalCostInputs = $bookedActivityAccordions.find('.exact-final-cost-input');
+
+    // Sum up the final costs for each activity
+    let summedAmountInteger = 0;
+    $exactFinalCostInputs.each(function(index) {
+        // Final Cost value
+        const inputValue = $(this).val();
+        if (! isNaN(inputValue)) {
+            const inputValueInteger = Math.round(inputValue * 100);
+            summedAmountInteger = Math.round(summedAmountInteger + inputValueInteger); // Sum
+        }
+    });
+    // Convert back to fixed decimal
+    let summedFixedDecimal = (summedAmountInteger / 100).toFixed(2);    
+
+    // Update .js-itinerary-price-value innerHTML with the sum
+    $('.js-itinerary-price-value').html(summedFixedDecimal);
+
+    // Get all activities that are not booked
+    const $uncheckedBookedCheckboxes = $('.activity-booked-checkbox:not(:checked)');
+
+    if ($uncheckedBookedCheckboxes && $uncheckedBookedCheckboxes.length > 0) {
+        // If any activities are not booked, set .activity-total.estimated-total to display and .activity-total.final-total to display none
+        $('.activity-total.estimated-total').show();
+        $('.activity-total.final-total').hide();
+    } else {
+        // Else set .activity-total.estimated-total to display none and .activity-total.final-total to display
+        $('.activity-total.final-total').show();
+        $('.activity-total.estimated-total').hide();
+    }
+
+}
+
+},
+
+    updateActivityApprovalStatus: function() {
+        // Find all checked activity approvals
+        const $checkedActivityApprovals = $('.activity-approval-confirm:checked').closest('.activity-approval-warning');
+        // Set their related .activity-approval-already-confirm input value to '1'
+        $checkedActivityApprovals.find('input.activity-approval-already-confirm').val('1');
+        // Make sure their message is the confirmed message
+        $checkedActivityApprovals.find('.activity-approval-warning-message').hide();
+        $checkedActivityApprovals.find('.activity-approval-confirmed-message').show();
+        // If user is not concierge
+        if ('1' !== $('input[name="concierge-user"]').val()) {
+            // Hide the checkbox input
+            $checkedActivityApprovals.find('.activity-approval-confirm-container').hide();
+        }
+        // Find all unchecked activity approvals
+        const $uncheckedActivityApprovals = $('.activity-approval-confirm:not(:checked)').closest('.activity-approval-warning');
+        // Do NOT change their .activity-approval-already-confirm input value
+        // Make sure their message is the warning message
+        $uncheckedActivityApprovals.find('.activity-approval-confirmed-message').hide();
+        $uncheckedActivityApprovals.find('.activity-approval-warning-message').show();
+    },
+
+    updateActivityBookedStatus: function() {
+        // Only do this if user is concierge...
+        if ('1' === $('input[name="concierge-user"]').val()) {
+            // Find all checked booking boxes
+            const $checkedBookedCheckboxes = $('.activity-booked-checkbox:checked');
+            // Get their related activities
+            const $bookedActivityAccordions = $checkedBookedCheckboxes.closest('.activity-accordion');
+            $bookedActivityAccordions.each(function(index) {
+                $accordion = $(this);
+                // Set the memo in the activity heading to display
+                $accordion.find('.activity-booked-memo').show();
+                // If Time Booked is set, set .exact-time-booked-value
+                const $exactTimeBookedSelect = $accordion.find('.exact-time-booked-select');
+                const $exactTimeBookedSpan = $accordion.find('.exact-time-booked-memo-value');
+                if ($exactTimeBookedSelect && $exactTimeBookedSpan) {
+                    const exactTimeBookedValue = $exactTimeBookedSelect.val();
+                    if (exactTimeBookedValue && exactTimeBookedValue !== 'Select a time') {
+                        $exactTimeBookedSpan.html(exactTimeBookedValue);
+                        $exactTimeBookedSpan.closest('.exact-time-booked-memo').show();
+                    } else {
+                        $exactTimeBookedSpan.closest('.exact-time-booked-memo').hide();
+                    }
+                }
+                // If Exact Final Cost is set, set .exact-final-cost-value
+                const $exactFinalCostInput = $accordion.find('.exact-final-cost-input');
+                const $exactFinalCostSpan = $accordion.find('.exact-final-cost-memo-value');
+                if ($exactFinalCostInput && $exactFinalCostSpan) {
+                    const exactFinalCostValue = $exactFinalCostInput.val();
+                    if (exactFinalCostValue) {
+                        $exactFinalCostSpan.html(exactFinalCostValue);
+                        $exactFinalCostSpan.closest('.exact-final-cost-memo').show();
+                    } else {
+                        $exactFinalCostSpan.closest('.exact-final-cost-memo').hide();
+                    }
+                }
+                // Set their related info container to display
+                $accordion.find('.activity-booked-info').slideDown();
+            });
+
+            // Find all unchecked booking boxes
+            const $uncheckedBookedCheckboxes = $('.activity-booked-checkbox:not(:checked)');
+            // Get their related activities
+            const $notBookedActivityAccordions = $uncheckedBookedCheckboxes.closest('.activity-accordion');
+            $notBookedActivityAccordions.each(function(index) {
+                $accordion = $(this);
+                // Hide the memo in the activity heading
+                $accordion.find('.activity-booked-memo').hide();
+                // Hide their related info container
+                $accordion.find('.activity-booked-info').slideUp();
+            });
+
+        }
+    },
+},
+
+    FXUP.General = {
+
+        init: function() {
+            $('.email-test').on('click', function(event) {
+                event.preventDefault();
+                $.ajax({
+                    type: 'post',
+                    url: FX.ajaxurl,
+                    data: {
+                        action: 'itinerary_deadline_check'
+                    }
+                });
+            });
+        }
+    },
+
+    FXUP.Activities = {
+        tripDay: null,
+        itineraryPostIDElement: null,
+        itineraryPostID: null,
+        $popupContainer: null,
+        $dayWrappers: null,
+        $flyoutsContainer: null,
+        flyoutTypesAdded: null,
+        init: function() {
+            this.bind();
+        },
+
+        bind: function() {
+            this.itineraryPostIDElement = document.querySelector('input[name="itinerary_id"]');
+            this.itineraryPostID = this.itineraryPostIDElement ? this.itineraryPostIDElement.value : null;
+            this.$dayWrappers = $('.itinerary-day-wrapper');
+            this.$popupContainer = $('.itin-add-popup');
+            this.$flyoutsContainer = $('#flyouts-container');
+            // Loaded on page load
+            this.$popupContainer.find('.js-add-activity').on('click', this.addActivity);
+            this.$popupContainer.find('.js-add-service').on('click', this.addService);
+            this.$popupContainer.find('.js-add-wedding').on('click', this.addWedding);
+            this.$popupContainer.find('.js-add-activity-item').on('click', this.activityDayOptions); // Add to Itinerary - (Custom, Celebration). Some are async (Post Types), others are loaded on page load (Custom, Celebration).
+			this.$dayWrappers.each( this.updateTitleIndex );
+
+            // Async
+            this.$flyoutsContainer.on('click', '.js-add-activity-item', this.activityDayOptions); // Add to Itinerary - Post Types. Some are async (Post Types), others are loaded on page load (Custom, Celebration).
+            this.$flyoutsContainer.on('click', '.activity-toggle', this.activityToggleDescription); // View Activity Details
+            this.$flyoutsContainer.on('change', '.js-act-filter', this.activityFilter); // Filter By Category
+            //  $(".js-toggle-addclass").on( 'click', this.addClass); // MAY NEED TO DELEGATE THIS - the listener in main.js is bound to elements on page load.
+            this.$flyoutsContainer.on('click', '.flyout-close', function(event){
+                $(this).closest('.flyout').removeClass('active');
+            });
+
+            $('body').on('click', '.js-delete', this.deleteActivity);
+            $('body').on('click', '.js-delete-confirm', this.activityConfirmDelete);
+            $('body').on('click', '.js-delete-cancel', this.deleteCancel);
+            $('body').on('click', '.js-add-activity-confirm', this.addActivityConfirm);
+            $('.activity-message-options').on('change', this.updateMessage);
+
+            $('body').on('input blur', 'input[name^="custom_activity_title"]', this.updateCustomTitleName);
+            $('body').on('change', 'select[name^="activity_time_booked"], select.exact-time-booked-select', this.updateTitleTime);
+            $('body').on('ifChanged', '.activity-booked-checkbox', this.updateTitleTime); // For iCheck boxes
+            $('body').on('ifChanged', '.activity-booked-checkbox', this.updateTitleBooked); // For iCheck boxes
+        },
+
+        setTripDay(day) {
+            this.tripDay = parseInt(day);
+        },
+
+        updateMessage: function(event) {
+            const $select = $(event.target);
+            const optionValue = $select.find('option:selected').val();
+            const $textArea = $select.closest('.activity-message-options-container').next('.activity-message-container').find('textarea.activity-message');
+            $textArea.val(optionValue);
+        },
+
+        maybeGetFlyout(type) {
+            if (!(this.flyoutTypesAdded instanceof Set)) {
+                this.flyoutTypesAdded = new Set();
+            }
+            if (!this.flyoutTypesAdded.has(type)) {
+                this.getFlyout(type);
+            }
+        },
+
+        getFlyout(type) {
+            $.ajax({
+                type: 'POST',
+                url: FX.ajaxurl,
+                data: {
+                    action: 'get_event_type_flyout',
+                    itinerary_post_id: FXUP.Activities.itineraryPostID,
+                    event_post_type: type,
+                },
+                success: function(response) {
+                    const responseJSON = JSON.parse(response);
+                    let markup = responseJSON.markup;
+                    FXUP.Activities.appendFlyout(markup);
+                },
+                // dataType: dataType,
+                async:false
+            });
+        },
+
+        appendFlyout(markup) {
+            this.$flyoutsContainer.append(markup);
+        },
+
+        addActivity: function(event) {
+            event.preventDefault();
+            FXUP.Activities.maybeGetFlyout('activity');
+            $('.itin-add-popup').fadeOut();
+            $('#flyout-activities').addClass('active');
+        },
+
+        addService: function(event) {
+            event.preventDefault();
+            FXUP.Activities.maybeGetFlyout('service');
+            $('.itin-add-popup').fadeOut();
+            $('#flyout-services').addClass('active');
+        },
+
+        addWedding: function(event) {
+            event.preventDefault();
+            FXUP.Activities.maybeGetFlyout('wedding');
+            $('.itin-add-popup').fadeOut();
+            $('#flyout-weddings').addClass('active');
+        },
+
+        activityToggleDescription: function(event) {
+            event.preventDefault();
+
+            if( $(this).hasClass('fa-plus')) { // activity is open
+                $('.activity-toggle').addClass('fa-minus').removeClass('fa-plus');                
+                $('.js-activity-description').slideUp();
+                // $(this).closest('.villa-smbtn').find('.js-activity-description').slideToggle();
+            }
+            else if( $(this).hasClass('fa-minus')) {
+                $('.activity-toggle').addClass('fa-minus').removeClass('fa-plus');
+                $(this).removeClass('fa-minus').addClass('fa-plus');
+                $('.js-activity-description').slideUp();
+                $(this).closest('.villa-smbtn').find('.js-activity-description').slideToggle();
+            }
+            else {
+                $('.activity-toggle').addClass('fa-minus').removeClass('fa-plus');
+                $(this).addClass('fa-plus');
+                $('.js-activity-description').slideUp();
+                $(this).closest('.villa-smbtn').find('.js-activity-description').slideToggle();
+            }
+
+        },
+
+        activityFilter: function(event) {
+            var filterVal = $(this).find(':selected').val();
+            if( filterVal == 'All' ) {
+                $('.js-activity-row').show();
+            }
+            else {
+                $('.js-activity-row').hide();
+                $('.js-act-cat'+filterVal).show();
+            }
+        },
+
+        activityDayOptions: function(event) {
+            event.preventDefault();
+            // debugger;
+
+            // On the popup
+            // var day = $(this).attr('data-day'); // The clicked element on the popup has a data attribute for the day to add this activity to.
+            $('.js-add-activity-item').removeClass('js-day-selected');
+
+            // On the flyout
+            $('.activity-confirm-days input').each( function() {
+                $(this).attr('checked', false);
+            });
+
+            if( FXUP.Activities.tripDay != 0 ) {
+                $('.activity-confirm-days input[value="'+FXUP.Activities.tripDay+'"]').each( function() {
+                    $(this).attr('checked', true);
+                });
+                $('.js-add-activity-item').addClass('js-day-selected');
+            }
+
+            // The whole js-day-selected thing is for functionality that is not currently live - ability to choose day dynamically.
+            if( $(this).hasClass('js-day-selected') ){
+                $(this).siblings('.activity-confirm-days').find('.js-add-activity-confirm').click();  
+            }
+            else {
+                $(this).siblings('.activity-confirm-days').slideToggle();
+            }
+
+        },
+
+        deleteActivity: function(event) {
+            event.preventDefault();
+
+            var activityDelete = $(this).closest('.js-accordion-wrapper').data('activity');
+            $('.js-delete-confirm').attr('data-actdelete', activityDelete);
+            $('.js-popup-delete').fadeIn();
+        },
+
+        activityConfirmDelete: function(event) {
+            event.preventDefault();
+            var activityDelete = $(this).attr('data-actdelete'),
+                activityRows = $('*[data-activity='+activityDelete+']').closest('.sec-itinerary-accordion').find('.js-accordion-wrapper'),
+                activityCount = activityRows.size() - 1;
+
+            $('*[data-activity='+activityDelete+']').slideUp();
+            activityCountInsert = 'No Activities Added Yet';
+
+            if( activityCount == 1 ) {
+                activityCountInsert = activityCount + ' Itinerary Item';
+            }
+            else if( activityCount > 1 ) {
+                activityCountInsert = activityCount + ' Itinerary Items';
+            }
+
+            const $activityCountMessageContainer =  $('*[data-activity='+activityDelete+']').closest('.itinerary-day-wrapper').find('.js-act-count');
+
+            // If no activities left
+            if (1 > activityCount) {
+                // Hide the View/Edit Day Details button
+                $activityCountMessageContainer.closest('.itinerary-day-wrapper').find('.js-itinerary-toggle').first().hide();
+                // Roll up the accordion
+                activityRows.closest('.itinerary-day-activities').slideUp();
+                // Grey out the activity count if no activities left
+                $activityCountMessageContainer.addClass('activity-count-no-activities');
+            }
+
+            $activityCountMessageContainer.html(activityCountInsert);
+
+            setTimeout(function(){
+                $('*[data-activity='+activityDelete+']').remove();
+            }, 500);
+            $('.js-popup-delete').fadeOut();
+
+
+
+            var activityPrices = $('.js-total-price'),
+                itineraryTotalPrice = 0;
+
+            $.each(activityPrices, function( i, v ) {
+                costRaw = $(this).html();
+                costFormatted = costRaw.replace( '$', '' );
+                itineraryTotalPrice += parseFloat(costFormatted);
+            });
+
+            itineraryPriceInsert = itineraryTotalPrice.toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
+            // $('.js-total-itinerary-price').html('$' + itineraryPriceInsert);
+
+            $('.js-itin-save-status').slideDown();
+            if( $('.js-reload-warning').length > 0 ) {
+                window.onbeforeunload = function () {
+                    return true;
+                };
+                $('.js-reload-warning').show();
+            }
+        },
+
+        deleteCancel: function(event) {
+            event.preventDefault();
+            $('.js-popup-delete').fadeOut();
+        },
+
+        addActivityConfirm: function(event) {
+            event.preventDefault();
+            var selectedDays = $(this).closest('.activity-confirm-days').find('input[name=selected_days]:checked'),
+                selectedValues = [],
+                pid = $(this).data('pid'),
+                itinUser = $('input[name=concierge-user]').val(),
+                itin = $('input[name=itinerary_id]').val(),
+                action = 'add_activity_days',
+                celebration = false;
+
+
+
+            if( $(this).data('custom') == true ) {
+                action = 'add_custom_activity_days';
+            }
+
+            if( $(this).data('celebration') == true ) {
+                celebration = true;
+            }
+
+
+            $.each(selectedDays, function(i, v) {
+
+                selectedVal = $(this).val();
+                dayActivities = $('.js-day-' + selectedVal).find('.js-accordion-wrapper');
+                dayActVal = [];
+
+                $.each(dayActivities, function() {
+                    dayActivity = $(this).find('input[name=activity_counter]').val();
+                    dayActVal.push(parseInt(dayActivity));
+                });
+
+                selectedValues[i] = {
+                    day: selectedVal,
+                    activities: dayActVal
+                }
+            });
+
+            $.ajax({
+                type: 'post',
+                url: FX.ajaxurl,
+                data: {
+                    action: action,
+                    pid: pid,
+                    selected_days: selectedValues,
+                    user: itinUser,
+                    itin: itin,
+                    celebration: celebration
+                },
+                success: function( results ) {
+                    var activityInsert = JSON.parse( results );
+                    $.each( activityInsert, function() {
+
+                        /*                         if( parseInt(this.activity) == 1 ) {
+                $('.js-day-'+this.day).find('.itinerary-day-heading').after(this.html);
+                $('.js-day-'+this.day).find('.js-act-count').html(this.activity + ' Activity');
+                $('.js-day-'+this.day).find('.js-itinerary-toggle').show();
+                $('.js-day-'+this.day).find('.js-add-itinerary-item').appendTo('.js-day-'+this.day+' .sec-itinerary-accordion');                            
+            } else { */
+                        // const day = $('.js-day-'+this.day);
+                        $(this.html).prependTo('.js-day-'+this.day+' .sec-itinerary-accordion'); // Add to the DOM
+                        const $day = $('.js-day-'+this.day);
+                        let activityCount = $day.find('[data-activity]').length;
+                        let activityCountHTML = '1 Activity';
+                        if( activityCount > 1 ) {
+                            activityCountHTML = activityCount + ' Activities';
+                        }
+                        const $activity = $(`[data-activity="day-${this.day}-activity-${this.activity}"]`);
+                        $('.js-day-'+this.day).find('.js-itinerary-toggle').show();
+                        $('.js-day-'+this.day).find('.js-act-count').html(activityCountHTML).removeClass('activity-count-no-activities');
+                        // $('.js-day-'+this.day).find('.js-add-itinerary-item').appendTo('.js-day-'+this.day+' .sec-itinerary-accordion');   
+                        //}
+                        $('.js-day-'+this.day).find('select[name=activity_time_booked-day-'+this.day+'-activity-'+this.activity+']').selectric({
+                            arrowButtonMarkup: '<b class="button"></b>'
+                        });
+
+                        $('.js-day-'+this.day).find('select[name=custom_activity_time-day-'+this.day+'-activity-'+this.activity+']').selectric({
+                            arrowButtonMarkup: '<b class="button"></b>'
+                        });
+
+                        $('.js-day-'+this.day).find('select[name=exact_time_booked-day-'+this.day+'-activity-'+this.activity+']').selectric({
+                            arrowButtonMarkup: '<b class="button"></b>'
+                        });
+
+                        const $messageOptionsSelect = $activity.find('.activity-message-options');
+                        $messageOptionsSelect.on('change', FXUP.Activities.updateMessage);
+
+                        $('.js-day-'+this.day).find('select[name=activity_message_options-day-'+this.day+'-activity-'+this.activity+']').selectric({
+                            arrowButtonMarkup: '<b class="button"></b>'
+                        });
+
+                        $('.js-day-'+this.day).find('.js-guests').multiSelect();
+
+                        // $('.js-day-'+this.day).find('.js-guests').selectric();
+
+                        $('.js-day-'+this.day+' input').iCheck();
+
+                        $('.js-day-'+this.day).find('.itinerary-day-activities').slideDown();
+                        $('.js-day-'+this.day).find('.js-itinerary-toggle i').addClass('fa-chevron-up');
+						
+						FXUP.Activities.updateTitleIndex(this.day - 1);
+
+                        $('.itin-add-popup').hide();
+                        $('.js-itin-save-status').slideDown();
+
+                        $('.flyout').removeClass('active');
+                        // reset all flyout fields/accordions
+                        resetTarget = $('.js-activity-row');
+                        $.each(resetTarget, function() {
+                            $(this).find('.fas').not('.fa-arrow-left, .fa-file-import, .fa-chevron-down, .fa-chevron-up, .fa-book-reader, .fa-exclamation-circle, .please-do-not-turn-me-into-a-math-symbol').removeClass('fa-minus').addClass('fa-plus');
+                            $(this).find('.js-activity-description').hide();
+                            $(this).find('.activity-confirm-days').hide();
+
+
+                            resetDayTarget = $(this).find('.activity-confirm-days input[name=selected_days]');
+                            $.each(resetDayTarget, function() {
+                                $(this).prop('checked', false);
+                            });
+                        });
+
+                    });
+
+                    if( $('.js-reload-warning').length > 0 ) {
+                        window.onbeforeunload = function () {
+                            return true;
+                        };
+                        $('.js-reload-warning').show();
+                    }
+                }
+            });
+        },
+        getWrapper(elem) {
+            $elem = $(elem);
+            let $wrapper;
+            if ($elem.hasClass('js-accordion-wrapper')) {
+                $wrapper = $elem;
+            } else {
+                $wrapper = $elem.closest('.js-accordion-wrapper');
+            }
+            return $wrapper;
+        },
+        isBooked(elem) {
+            let isBooked = false;
+            $wrapper = FXUP.Activities.getWrapper(elem);
+            if (FXUP.Itinerary.isConcierge()) {
+                let $bookedInput = $wrapper.find('input.activity-booked-checkbox');
+                if ($bookedInput.attr('checked')) {
+                    isBooked = true;
+                }
+            } else {
+                let $bookedSpan = $wrapper.find('span.activity-booked.activity-booked-memo');
+                if ('none' !== $bookedSpan.css('display')) {
+                    isBooked = true;
+                }
+            }
+            return isBooked;
+        },
+        getRequestedTime(elem) {
+            let requestedTime;
+            $wrapper = FXUP.Activities.getWrapper(elem);
+            $input = $wrapper.find('select[name^="activity_time_booked"]');
+            if ($input.val() && $input.val() !== 'Select a time') {
+                requestedTime = $input.val();
+            }
+            return requestedTime;
+        },
+        getBookedTime(elem){
+            let bookedTime;
+            $wrapper = FXUP.Activities.getWrapper(elem);
+            // Concierge has access to input, non-concierge does not
+            if (FXUP.Itinerary.isConcierge()) {
+                $input = $wrapper.find('select.exact-time-booked-select');
+                if ($input.val() && $input.val() !== 'Select a time') {
+                    bookedTime = $input.val();
+                }
+            } else {
+                $span = $wrapper.find('.exact-time-booked-memo-value');
+                if ($span.text()) {
+                    bookedTime = span.text();
+                }
+            }
+            return bookedTime;
+        },
+        updateCustomTitleName(e) {
+            // As the user types their new title, update the title which displays in the Activity row to match
+            let $input = $(this);
+            let $wrapper = FXUP.Activities.getWrapper(this);
+            let $title = $wrapper.find('.activity--title-name');
+            $title.text($input.val());
+        },
+        updateTitleTime(e) {
+            let newTime;
+            let $wrapper = FXUP.Activities.getWrapper(this);
+            let $time = $wrapper.find('.activity--title-timePrefix');
+            let $timeSeparator = $wrapper.find('.activity--title-timeSeparator');
+            // Try to find a valid booked time
+            if (FXUP.Activities.isBooked(this)) {
+                newTime = FXUP.Activities.getBookedTime($wrapper);
+            }
+            // If no valid booked time found, try to find a valid requested time
+            if (! newTime){
+                newTime = FXUP.Activities.getRequestedTime($wrapper);
+            }
+            // Only update the time text if we have a newTime to use
+            if (newTime) {
+                $time.text(newTime);
+                $timeSeparator.css('display', 'unset');
+            } else {
+                $time.text('');
+                $timeSeparator.css('display', 'none');
+            }
+        },
+        updateTitleBooked(e) {
+            let $wrapper =  FXUP.Activities.getWrapper(this);
+            let $bookedSpan = $wrapper.find('.activity-booked-memo');
+            if (FXUP.Activities.isBooked($wrapper)) {
+                $bookedSpan.css('display', 'unset');
+            } else {
+                $bookedSpan.css('display', 'none');
+            }
+        },
+		updateTitleIndex(i) {
+			const index = i + 1;
+			const $day = $('.js-day-'+index);
+			const $wrappers = $day.find('.js-accordion-wrapper');
+			let titles = [];
+			$wrappers.each(function(){
+				console.log( index );
+				let $title = $(this).find('.activity--title-name');
+				$title.removeAttr('data-occurrence');
+				let titleText = $title.text();
+				
+				titles.push( titleText );
+				
+				let occurrences = titles.reduce(function (acc, curr) {
+					return acc[curr] ? ++acc[curr] : acc[curr] = 1, acc
+				}, {});
+				let titleOccurrence = occurrences.hasOwnProperty( titleText ) ? parseInt( occurrences[titleText] ) : 0;
+				
+				if ( titleOccurrence > 1 ) {
+					$title.attr( 'data-occurrence', titleOccurrence );
+				}
+			})
+		}
+    }
+
+/*     $(function() {
+    $.exitIntent('enable');
+    FXUP.GuestList.init();
+    FXUP.GuestTravel.init();
+    FXUP.GuestTravelInfo.init();
+    FXUP.FormItinerary.init();
+    FXUP.Itinerary.init();
+    FXUP.General.init();
+    FXUP.Activities.init();
+    FXUP.RoomArrangements.init();
+    FXUP.RoomBookingValidation.init();
+    });
+    */
+const onDocReady = [
+    () => { $.exitIntent('enable'); },
+    () => { FXUP.GuestList.init(); },
+    () => { FXUP.GuestTravel.init(); },
+    () => { FXUP.GuestTravelInfo.init(); },
+    () => { FXUP.FormItinerary.init(); },
+    () => { FXUP.Itinerary.init(); },
+    () => { FXUP.General.init(); },
+    () => { FXUP.Activities.init(); },
+    () => { FXUP.RoomArrangements.init(); },
+    () => { FXUP.RoomBookingValidation.init(); },
+];
+
+// RECOMMENDED
+// Add 1 function to jQuery ready, but that function will iterate through callbacks and move each callback separately to event queue
+$(function () {
+    onDocReady.forEach(callback => {
+        setTimeout(callback, 0);
+    });
+});
+
+
+return FXUP;
+
+})(FXUP || {}, jQuery)
