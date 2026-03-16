@@ -57,6 +57,7 @@ class Itinerary
 	private $edit_lock;
 	private $disable_all_notifications;
 	private $payment_link;
+	private static $child_migration_checked_itineraries = array();
 
 	public function __construct( $post_object_or_id, $options = array() )
 	{
@@ -73,6 +74,7 @@ class Itinerary
 				throw new \Exception( "No Itinerary post found with ID: $this->post_id" );
 			}
 			$this->post_object = $post_object;
+			$this->maybeSoftMigrateLegacyChildren();
 			return $this->post_object;
 		} else {
 			if ( ! $post_object_or_id instanceof \WP_Post ) {
@@ -81,6 +83,8 @@ class Itinerary
 			$this->post_object = $post_object_or_id;
 			$this->post_id = $this->post_object->ID;
 		}
+
+		$this->maybeSoftMigrateLegacyChildren();
 
 		return $this;
 	}
@@ -671,7 +675,7 @@ class Itinerary
 			return $entity_children_count;
 		}
 
-		// Backwards compatibility for legacy rows that still track child count on adults.
+		// @deprecated legacy child storage: backwards compatibility for rows that still track child count on adults.
 		$total_children = 0;
 		foreach ( $this->getAdultGuests() as $Guest ) {
 			$total_children += intval( $Guest->getChildren() );
@@ -686,57 +690,36 @@ class Itinerary
 	}
 
 
+
 	public function migrateLegacyChildrenToGuestEntities()
 	{
-		$created = 0;
-		foreach ( $this->getAdultGuests() as $Guest ) {
-			$legacy_children_count = intval( $Guest->getChildren() );
-			if ( $legacy_children_count <= 0 ) {
-				continue;
-			}
+		$Migration = new \FXUP_User_Portal\Migrations\ChildGuestMigration();
+		$before = $Migration->getStats();
+		$Migration->migrateItineraryChildren( $this->getPostID() );
+		$after = $Migration->getStats();
 
-			for ( $index = 1; $index <= $legacy_children_count; $index++ ) {
-				$child_name = trim( $Guest->getFirstName() . ' Child ' . $index . ' ' . $Guest->getLastName() );
-				$already_exists = false;
-				foreach ( $this->getChildGuests() as $ChildGuest ) {
-					if ( strtolower( trim( $ChildGuest->getFullName() ) ) === strtolower( $child_name ) ) {
-						$already_exists = true;
-						break;
-					}
-				}
-				if ( $already_exists ) {
-					continue;
-				}
-
-				$child_post_id = wp_insert_post( array(
-					'post_type' => 'guest',
-					'post_status' => 'publish',
-					'post_title' => $this->getTitle() . ' - ' . $child_name,
-				) );
-
-				if ( ! $child_post_id || is_wp_error( $child_post_id ) ) {
-					continue;
-				}
-
-				update_post_meta( $child_post_id, 'itinerary_id', $this->getPostID() );
-				update_post_meta( $child_post_id, 'guest_first_name', trim( $Guest->getFirstName() . ' Child ' . $index ) );
-				update_post_meta( $child_post_id, 'guest_last_name', $Guest->getLastName() );
-				update_post_meta( $child_post_id, 'guest_is_child', 1 );
-				update_post_meta( $child_post_id, 'guest_children', 0 );
-				update_post_meta( $child_post_id, 'guest_parent_id', $Guest->getPostID() );
-				$created++;
-			}
-
-			if ( $legacy_children_count > 0 ) {
-				update_post_meta( $Guest->getPostID(), 'guest_children', 0 );
-			}
-		}
-
-		if ( $created > 0 ) {
+		if ( $after['child_guests_created'] > $before['child_guests_created'] ) {
 			$this->guest_objects = null;
 		}
 
-		return $created;
+		return (int) ( $after['child_guests_created'] - $before['child_guests_created'] );
+	}
+
+	private function maybeSoftMigrateLegacyChildren()
+	{
+		if ( isset( self::$child_migration_checked_itineraries[ $this->getPostID() ] ) ) {
+			return;
+		}
+
+		self::$child_migration_checked_itineraries[ $this->getPostID() ] = true;
+		$Migration = new \FXUP_User_Portal\Migrations\ChildGuestMigration();
+		$legacy = $Migration->detectLegacyChildren( $this->getPostID() );
+		if ( ! empty( $legacy['has_legacy'] ) ) {
+			$Migration->migrateItineraryChildren( $this->getPostID() );
+			$this->guest_objects = null;
+			$this->Rooms = null;
+			$this->raw_rooms = null;
+		}
 	}
 
 	public function transportationFormViewPath()

@@ -196,7 +196,6 @@ class FXUP_Importer
 			update_post_meta( $child_guest_id, 'guest_last_name', $child_last_name );
 			update_post_meta( $child_guest_id, 'itinerary_id', $itin_id );
 			update_post_meta( $child_guest_id, 'guest_is_child', 1 );
-			update_post_meta( $child_guest_id, 'guest_children', 0 );
 			update_post_meta( $child_guest_id, 'guest_parent_id', $parent_guest_id );
 		}
 	}

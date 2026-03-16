@@ -1363,7 +1363,7 @@ class FXUP_Itinerary_Process
 					// FXUP_USER_PORTAL()->debug_log('guest_email:', $value);
 					break;
 				case 'guest_children':
-					// Backwards compatibility only; child guests are now first-class guest entities.
+					// @deprecated legacy child storage. Backwards compatibility only; child guests are now first-class guest entities.
 					break;
 				case 'guest_is_child':
 					$Guest->setIsChild( (bool) $value );
@@ -1657,6 +1657,7 @@ class FXUP_Itinerary_Process
 			for ( $i = 1; $i <= $Room->getTotalAllowedGuests(); ++ $i ) {
 				$guest_field_key = 'room-' . $room_form_key . '-guest-' . $i;
 				$legacy_child_name_key = 'room-' . $room_form_key . '-guest-' . $i . '-child-name';
+				// @deprecated legacy child storage (guest_N_child_name)
 				$legacy_child_name = isset( $room_list[$legacy_child_name_key] ) ? trim( $room_list[$legacy_child_name_key] ) : '';
 
 				// Preferred model: save selected guest entity directly in room slot.
@@ -1717,7 +1718,6 @@ class FXUP_Itinerary_Process
 		update_post_meta( $new_guest_id, 'guest_first_name', $first_name );
 		update_post_meta( $new_guest_id, 'guest_last_name', $last_name );
 		update_post_meta( $new_guest_id, 'guest_is_child', 1 );
-		update_post_meta( $new_guest_id, 'guest_children', 0 );
 
 		return new \FXUP_User_Portal\Models\Guest( $new_guest_id );
 	}
@@ -1733,17 +1733,10 @@ class FXUP_Itinerary_Process
 			$bed_config = isset( $room_list['room-' . $r . '-bed-config'] ) ? $room_list['room-' . $r . '-bed-config'] : '';
 			$pack_and_play = isset( $room_list['room-' . $r . '-pack-and-play'] ) ? 1 : 0;
 			$guest_one = isset( $room_list['room-' . $r . '-guest-1'] ) && $room_list['room-' . $r . '-guest-1'] !== 'Select a guest' ? $room_list['room-' . $r . '-guest-1'] : '';
-			$guest_one_child = isset( $room_list['room-' . $r . '-guest-1-child'] ) ? $room_list['room-' . $r . '-guest-1-child'] : '';
-			$guest_one_child_name = isset( $room_list['room-' . $r . '-guest-1-child-name'] ) ? $room_list['room-' . $r . '-guest-1-child-name'] : '';
+			// @deprecated legacy child storage (guest_N_child / guest_N_child_name) is read-only in this transition path.
 			$guest_two = isset( $room_list['room-' . $r . '-guest-2'] ) && $room_list['room-' . $r . '-guest-2'] !== 'Select a guest' ? $room_list['room-' . $r . '-guest-2'] : '';
-			$guest_two_child = isset( $room_list['room-' . $r . '-guest-2-child'] ) ? $room_list['room-' . $r . '-guest-2-child'] : '';
-			$guest_two_child_name = isset( $room_list['room-' . $r . '-guest-2-child-name'] ) ? $room_list['room-' . $r . '-guest-2-child-name'] : '';
 			$guest_three = isset( $room_list['room-' . $r . '-guest-3'] ) && $room_list['room-' . $r . '-guest-3'] !== 'Select a guest' ? $room_list['room-' . $r . '-guest-3'] : '';
-			$guest_three_child = isset( $room_list['room-' . $r . '-guest-3-child'] ) ? $room_list['room-' . $r . '-guest-3-child'] : '';
-			$guest_three_child_name = isset( $room_list['room-' . $r . '-guest-3-child-name'] ) ? $room_list['room-' . $r . '-guest-3-child-name'] : '';
 			$guest_four = isset( $room_list['room-' . $r . '-guest-4'] ) && $room_list['room-' . $r . '-guest-4'] !== 'Select a guest' ? $room_list['room-' . $r . '-guest-4'] : '';
-			$guest_four_child = isset( $room_list['room-' . $r . '-guest-4-child'] ) ? $room_list['room-' . $r . '-guest-4-child'] : '';
-			$guest_four_child_name = isset( $room_list['room-' . $r . '-guest-4-child-name'] ) ? $room_list['room-' . $r . '-guest-4-child-name'] : '';
 			$additional_guest = isset( $room_list['room-' . $r . '-additional-guest'] ) ? $room_list['room-' . $r . '-additional-guest'] : '';
 			$special_request = isset( $room_list['room-' . $r . '-special-requests'] ) ? $room_list['room-' . $r . '-special-requests'] : '';
 			$room_guests_villa_id = isset( $room_list['room-' . $r . '-villa'] ) ? $this->validate_room_guests_villa_id( $room_list['room-' . $r . '-villa'] ) : false;
@@ -1753,17 +1746,9 @@ class FXUP_Itinerary_Process
 				'bed_configuration' => $bed_config,
 				'pack_and_play' => $pack_and_play,
 				'guest_1' => $guest_one,
-				'guest_1_child' => $guest_one_child,
-				'guest_1_child_name' => $guest_one_child_name,
 				'guest_2' => $guest_two,
-				'guest_2_child' => $guest_two_child,
-				'guest_2_child_name' => $guest_two_child_name,
 				'guest_3' => $guest_three,
-				'guest_3_child' => $guest_three_child,
-				'guest_3_child_name' => $guest_three_child_name,
 				'guest_4' => $guest_four,
-				'guest_4_child' => $guest_four_child,
-				'guest_4_child_name' => $guest_four_child_name,
 				'additional_guest' => $additional_guest,
 				'special_requests' => $special_request
 			);
