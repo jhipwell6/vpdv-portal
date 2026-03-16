@@ -513,6 +513,7 @@ class Room {
         }
 
         // Backwards compatibility for legacy room rows that stored child placeholders.
+        // @deprecated legacy child storage
         $key = 'guest_' . $index . '_child';
         $raw_row_itinerary = $this->getRawRowItinerary();
         return isset($raw_row_itinerary[$key]) ? (bool) $raw_row_itinerary[$key] : false;
