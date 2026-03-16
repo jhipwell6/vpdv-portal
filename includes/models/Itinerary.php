@@ -84,8 +84,6 @@ class Itinerary
 			$this->post_id = $this->post_object->ID;
 		}
 
-		$this->maybeSoftMigrateLegacyChildren();
-
 		return $this;
 	}
 
