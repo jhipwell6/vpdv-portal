@@ -2612,7 +2612,15 @@ var FXUP = ( function ( FXUP, $ ) {
 
 		activityDayOptions: function ( event ) {
 			event.preventDefault();
-			// debugger;
+			
+			const $activityItem = $( this );
+			if ( $activityItem.data( 'isProcessingClick' ) ) {
+				return;
+			}
+
+			$activityItem.data( 'isProcessingClick', true );
+			$activityItem.attr( 'aria-disabled', 'true' );
+			$activityItem.css( 'pointer-events', 'none' );
 
 			// On the popup
 			// var day = $(this).attr('data-day'); // The clicked element on the popup has a data attribute for the day to add this activity to.
@@ -2632,9 +2640,15 @@ var FXUP = ( function ( FXUP, $ ) {
 
 			// The whole js-day-selected thing is for functionality that is not currently live - ability to choose day dynamically.
 			if ( $( this ).hasClass( 'js-day-selected' ) ) {
-				$( this ).siblings( '.activity-confirm-days' ).find( '.js-add-activity-confirm' ).trigger( 'click', { day: FXUP.Activities.tripDay } );
+				$( this ).siblings( '.activity-confirm-days' ).find( '.js-add-activity-confirm' ).trigger( 'click', {
+					day: FXUP.Activities.tripDay,
+					sourceActivityItem: $activityItem
+				} );
 			} else {
 				$( this ).siblings( '.activity-confirm-days' ).slideToggle();
+				$activityItem.data( 'isProcessingClick', false );
+				$activityItem.attr( 'aria-disabled', 'false' );
+				$activityItem.css( 'pointer-events', '' );
 			}
 		},
 
@@ -2710,6 +2724,7 @@ var FXUP = ( function ( FXUP, $ ) {
 
 		addActivityConfirm: function ( event, data ) {
 			event.preventDefault();
+			const $sourceActivityItem = data && data.sourceActivityItem ? data.sourceActivityItem : null;
 			var selectedDays = $( this ).closest( '.activity-confirm-days' ).find( 'input[name="selected_days"]:checked' ),
 					selectedValues = [ ],
 					pid = $( this ).data( 'pid' ),
@@ -2760,6 +2775,13 @@ var FXUP = ( function ( FXUP, $ ) {
 					user: itinUser,
 					itin: itin,
 					celebration: celebration
+				},
+				complete: function () {
+					if ( $sourceActivityItem ) {
+						$sourceActivityItem.data( 'isProcessingClick', false );
+						$sourceActivityItem.attr( 'aria-disabled', 'false' );
+						$sourceActivityItem.css( 'pointer-events', '' );
+					}
 				},
 				success: function ( results ) {
 					var activityInsert = JSON.parse( results );
