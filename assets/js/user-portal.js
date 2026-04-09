@@ -401,9 +401,10 @@ var FXUP = ( function ( FXUP, $ ) {
 		},
 
 		getInvalidInputs( travelDetails ) {
+			const transportationRequirements = this.getTransportationRequirements( travelDetails );
 			let invalidInputs = [ ];
 			invalidInputs = travelDetails.filter( ( input ) => {
-				if ( ! this.shouldValidateInput( input.name ) ) {
+				if ( ! this.shouldValidateInput( input.name, transportationRequirements ) ) {
 					return false;
 				}
 
@@ -415,6 +416,23 @@ var FXUP = ( function ( FXUP, $ ) {
 			} );
 
 			return invalidInputs;
+		},
+
+		getTransportationRequirements( travelDetails ) {
+			return travelDetails.reduce( ( requirements, input ) => {
+				if ( input.name.includes( 'requires_arrival_transportation' ) ) {
+					requirements.arrival = input.value === '1';
+				}
+
+				if ( input.name.includes( 'requires_departure_transportation' ) ) {
+					requirements.departure = input.value === '1';
+				}
+
+				return requirements;
+			}, {
+				arrival: false,
+				departure: false,
+			} );
 		},
 
 		resetInvalidInputs( inputs ) {
@@ -433,7 +451,7 @@ var FXUP = ( function ( FXUP, $ ) {
 			} );
 		},
 
-		shouldValidateInput( name ) {
+		shouldValidateInput( name, transportationRequirements ) {
 			if (
 					name.includes( 'passport_number' ) ||
 					name.includes( 'travel_notes' ) ||
@@ -441,6 +459,30 @@ var FXUP = ( function ( FXUP, $ ) {
 					name.includes( 'requires_departure_transportation' ) ||
 					name.includes( 'guest_travel_status' )
 					) {
+				return false;
+			}
+
+			if (
+				(
+					name.includes( 'airline_' ) ||
+					name.includes( 'flight_number_' ) ||
+					name.includes( 'arrival_date_' ) ||
+					name.includes( 'arrival_time_' )
+				) &&
+				! transportationRequirements.arrival
+			) {
+				return false;
+			}
+
+			if (
+				(
+					name.includes( 'departure_airline_' ) ||
+					name.includes( 'departure_flight_number_' ) ||
+					name.includes( 'departure_date_' ) ||
+					name.includes( 'departure_time_' )
+				) &&
+				! transportationRequirements.departure
+			) {
 				return false;
 			}
 			return true;
@@ -688,9 +730,10 @@ var FXUP = ( function ( FXUP, $ ) {
 		},
 		
 		getInvalidInputs( travelDetails ) {
+			const transportationRequirements = this.getTransportationRequirements( travelDetails );
 			let invalidInputs = [ ];
 			invalidInputs = travelDetails.filter( ( input ) => {
-				if ( ! this.shouldValidateInput( input.name ) ) {
+				if ( ! this.shouldValidateInput( input.name, transportationRequirements ) ) {
 					return false;
 				}
 
@@ -702,6 +745,23 @@ var FXUP = ( function ( FXUP, $ ) {
 			} );
 
 			return invalidInputs;
+		},
+
+		getTransportationRequirements( travelDetails ) {
+			return travelDetails.reduce( ( requirements, input ) => {
+				if ( input.name.includes( 'requires_arrival_transportation' ) ) {
+					requirements.arrival = input.value === '1';
+				}
+
+				if ( input.name.includes( 'requires_departure_transportation' ) ) {
+					requirements.departure = input.value === '1';
+				}
+
+				return requirements;
+			}, {
+				arrival: false,
+				departure: false,
+			} );
 		},
 
 		resetInvalidInputs( inputs ) {
@@ -720,16 +780,38 @@ var FXUP = ( function ( FXUP, $ ) {
 			} );
 		},
 
-		shouldValidateInput( name ) {
+		shouldValidateInput( name, transportationRequirements ) {
 			if (
 					name.includes( 'passport_number' ) ||
 					name.includes( 'travel_notes' ) ||
 					name.includes( 'requires_arrival_transportation' ) ||
 					name.includes( 'requires_departure_transportation' ) ||
-					name.includes( 'guest_travel_status' ) ||
-					name.includes( 'arrival_date' ) ||
-					name.includes( 'departure_date' )
+					name.includes( 'guest_travel_status' )
 					) {
+				return false;
+			}
+
+			if (
+				(
+					name.includes( 'airline_' ) ||
+					name.includes( 'flight_number_' ) ||
+					name.includes( 'arrival_date_' ) ||
+					name.includes( 'arrival_time_' )
+				) &&
+				! transportationRequirements.arrival
+			) {
+				return false;
+			}
+
+			if (
+				(
+					name.includes( 'departure_airline_' ) ||
+					name.includes( 'departure_flight_number_' ) ||
+					name.includes( 'departure_date_' ) ||
+					name.includes( 'departure_time_' )
+				) &&
+				! transportationRequirements.departure
+			) {
 				return false;
 			}
 			return true;

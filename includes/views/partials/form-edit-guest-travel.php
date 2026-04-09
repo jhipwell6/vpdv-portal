@@ -7,19 +7,19 @@
 	<input type="text" name="passport_number_<?php echo $Guest->getPostID(); ?>" value="<?php echo $Guest->getPassportNumber(); ?>">
 </div>
 <div class="row push-bottom">
+	<label>Requires transportation to the Villa upon arrival?</label>
+	<div class="flex-row">
+		<input type="radio" name="requires_arrival_transportation_<?php echo $Guest->getPostID(); ?>" <?php echo $Guest->requiresArrivalTransportation() ? 'checked' : ''; ?> value="1"> <label class="push-right">Yes</label>
+		<input type="radio" name="requires_arrival_transportation_<?php echo $Guest->getPostID(); ?>" <?php echo ! $Guest->requiresArrivalTransportation() ? 'checked' : ''; ?> value="0"> <label class="push-right">No</label>
+	</div>
+</div>
+<div class="row push-bottom">
 	<label>Arrival Airline *</label>
 	<input type="text" name="airline_<?php echo $Guest->getPostID(); ?>" value="<?php echo $Guest->getArrivalAirline(); ?>">
 </div>
 <div class="row push-bottom">
 	<label>Arrival Flight Number *</label>
 	<input type="text" name="flight_number_<?php echo $Guest->getPostID(); ?>" value="<?php echo $Guest->getArrivalFlightNumber(); ?>">
-</div>
-<div class="row push-bottom">
-	<label>Requires transportation to the Villa upon arrival?</label>
-	<div class="flex-row">
-		<input type="radio" name="requires_arrival_transportation_<?php echo $Guest->getPostID(); ?>" <?php echo $Guest->requiresArrivalTransportation() ? 'checked' : ''; ?> value="1"> <label class="push-right">Yes</label>
-		<input type="radio" name="requires_arrival_transportation_<?php echo $Guest->getPostID(); ?>" <?php echo ! $Guest->requiresArrivalTransportation() ? 'checked' : ''; ?> value="0"> <label class="push-right">No</label>
-	</div>
 </div>
 <!-- BEGIN HIDDEN FIELD -->
 <div class="row push-bottom arrival-date-<?php echo $i; ?> hidden">
@@ -54,19 +54,19 @@
 	</div>
 </div>
 <div class="row push-bottom">
+	<label>Requires transportation from the Villa upon departure?</label>
+	<div class="flex-row">
+		<input type="radio" name="requires_departure_transportation_<?php echo $Guest->getPostID(); ?>" <?php echo $Guest->requiresDepartureTransportation() ? 'checked' : ''; ?> value="1"> <label class="push-right">Yes</label>
+		<input type="radio" name="requires_departure_transportation_<?php echo $Guest->getPostID(); ?>" <?php echo ! $Guest->requiresDepartureTransportation() ? 'checked' : ''; ?> value="0"> <label class="push-right">No</label>
+	</div>
+</div>
+<div class="row push-bottom">
 	<label>Departure Airline *</label>
 	<input type="text" name="departure_airline_<?php echo $Guest->getPostID(); ?>" value="<?php echo $Guest->getDepartureAirline(); ?>">
 </div>
 <div class="row push-bottom">
 	<label>Departure Flight Number *</label>
 	<input type="text" name="departure_flight_number_<?php echo $Guest->getPostID(); ?>" value="<?php echo $Guest->getDepartureFlightNumber(); ?>">
-</div>
-<div class="row push-bottom">
-	<label>Requires transportation from the Villa upon departure?</label>
-	<div class="flex-row">
-		<input type="radio" name="requires_departure_transportation_<?php echo $Guest->getPostID(); ?>" <?php echo $Guest->requiresDepartureTransportation() ? 'checked' : ''; ?> value="1"> <label class="push-right">Yes</label>
-		<input type="radio" name="requires_departure_transportation_<?php echo $Guest->getPostID(); ?>" <?php echo ! $Guest->requiresDepartureTransportation() ? 'checked' : ''; ?> value="0"> <label class="push-right">No</label>
-	</div>
 </div>
 <!-- BEGIN HIDDEN FIELD -->
 <div class="row push-bottom departure-date-<?php echo $i; ?> hidden">

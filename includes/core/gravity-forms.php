@@ -20,6 +20,10 @@ class Gravity_Forms
 		add_filter( 'gform_field_content_7', array( $this, 'set_readonly_fields' ), 10, 5 );
 		add_filter( 'gform_confirmation_anchor' , '__return_false' );
 		add_filter( 'gform_merge_tag_filter', array( $this, 'trim_blank_grocery_lines' ), 10, 6 );
+		add_filter( 'gform_pre_render', array( $this, 'populate_adult_guest_choices' ) );
+		add_filter( 'gform_pre_validation', array( $this, 'populate_adult_guest_choices' ) );
+		add_filter( 'gform_pre_submission_filter', array( $this, 'populate_adult_guest_choices' ) );
+		add_filter( 'gform_admin_pre_render', array( $this, 'populate_adult_guest_choices' ) );
 	}
     /**
      * Singleton factory Method
@@ -80,6 +84,30 @@ class Gravity_Forms
 		}
 		return $value;
 	}
+
+	public function populate_adult_guest_choices( $form )
+	{
+		if ( empty( $form['fields'] ) || ! is_array( $form['fields'] ) ) {
+			return $form;
+		}
+
+		$Itinerary = $this->get_itinerary_for_form( $form );
+		$choices = $this->get_adult_guest_choices( $Itinerary );
+
+		foreach ( $form['fields'] as &$field ) {
+			if ( ! $this->is_adult_guests_field( $field ) ) {
+				continue;
+			}
+
+			$field->choices = $choices;
+
+			if ( property_exists( $field, 'placeholder' ) && empty( $field->placeholder ) ) {
+				$field->placeholder = 'Select Parent';
+			}
+		}
+
+		return $form;
+	}
 	
 	public static function get_list_data()
 	{
@@ -130,6 +158,83 @@ class Gravity_Forms
 		}
 		
 		return $list;
+	}
+
+	private function is_adult_guests_field( $field )
+	{
+		if ( ! is_object( $field ) ) {
+			return false;
+		}
+
+		if ( empty( $field->allowsPrepopulate ) || empty( $field->inputName ) ) {
+			return false;
+		}
+
+		return 'adult_guests' === $field->inputName;
+	}
+
+	private function get_itinerary_for_form( $form )
+	{
+		$token = isset( $_GET['itin'] ) ? sanitize_text_field( wp_unslash( $_GET['itin'] ) ) : '';
+		if ( '' !== $token ) {
+			$Itinerary = \FXUP_User_Portal\Models\Itinerary::fromToken( $token );
+			if ( $Itinerary ) {
+				return $Itinerary;
+			}
+		}
+
+		$itinerary_id = $this->get_submitted_itinerary_id( $form );
+		if ( $itinerary_id > 0 ) {
+			try {
+				return new \FXUP_User_Portal\Models\Itinerary( $itinerary_id );
+			} catch ( \Exception $e ) {
+				return false;
+			}
+		}
+
+		return false;
+	}
+
+	private function get_submitted_itinerary_id( $form )
+	{
+		if ( empty( $form['fields'] ) || ! is_array( $form['fields'] ) ) {
+			return 0;
+		}
+
+		foreach ( $form['fields'] as $field ) {
+			if ( ! is_object( $field ) || empty( $field->inputName ) ) {
+				continue;
+			}
+
+			if ( 'itinerary_id' !== $field->inputName ) {
+				continue;
+			}
+
+			$input_key = 'input_' . $field->id;
+			$value = isset( $_POST[ $input_key ] ) ? wp_unslash( $_POST[ $input_key ] ) : '';
+
+			return absint( $value );
+		}
+
+		return 0;
+	}
+
+	private function get_adult_guest_choices( $Itinerary )
+	{
+		$choices = array();
+
+		if ( ! $Itinerary ) {
+			return $choices;
+		}
+
+		foreach ( $Itinerary->getAdultGuests() as $Guest ) {
+			$choices[] = array(
+				'text' => $Guest->getFullName(),
+				'value' => (string) $Guest->getPostID(),
+			);
+		}
+
+		return $choices;
 	}
 }
 

@@ -142,6 +142,7 @@ class FXUP_Itinerary_Process
 		add_shortcode( 'fxup_itinerary_form', array( $this, 'view_itinerary_form' ) );
 		add_shortcode( 'fxup_dashboard_view', array( $this, 'view_dashboard' ) );
 		add_shortcode( 'fxup_single_itinerary', array( $this, 'view_single_itinerary' ) );
+		add_shortcode( 'fxup_guest_list', array( $this, 'view_guest_list' ) );
 		add_shortcode( 'fxup_share_print_itinerary', array( $this, 'view_share_print_itinerary' ) );
 		add_shortcode( 'fxup_summary_view', array( $this, 'view_summary' ) );
 		add_shortcode( 'fxup_transportation_summary_view', array( $this, 'view_transportation_summary' ) );
@@ -402,6 +403,10 @@ class FXUP_Itinerary_Process
 			],
 			'email-account-creation-reminder' => [
 				'path' => FXUP_USER_PORTAL()->plugin_path() . '/includes/views/emails/email-account-creation-reminder.php',
+				'data' => [],
+			],
+			'guest-list' => [
+				'path' => FXUP_USER_PORTAL()->plugin_path() . '/includes/views/guest-list.php',
 				'data' => [],
 			],
 			'guest-list-edit-row' => [
@@ -3130,6 +3135,17 @@ class FXUP_Itinerary_Process
 
 		// Add to template data
 		$this->template_data['single-itinerary']['event_types'] = $event_types;
+	}
+	
+	public function view_guest_list()
+	{
+//		$this->setup_template_data_single_itinerary();
+//		extract( $this->template_data['single-itinerary'] );
+		ob_start();
+		include $this->views['guest-list']['path'];
+		$markup = ob_get_contents();
+		ob_end_clean();
+		return $markup;
 	}
 
 	public function view_summary()
